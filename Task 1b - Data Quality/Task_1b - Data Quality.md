@@ -1,0 +1,20612 @@
+
+# Install libraries
+
+
+```python
+import os
+import pandas as pd
+import numpy as np
+import matplotlib
+import pandas_profiling as pf
+
+from io import BytesIO
+from pandas.io import sql
+from sqlalchemy import create_engine
+from mysql import connector
+from google.cloud import storage
+from google.cloud import bigquery
+
+%matplotlib inline
+import matplotlib.pyplot as plt
+#plt.switch_backend('agg')
+
+pd.set_option('display.max_columns', None)
+```
+
+# Configure connection with Cloud SQL
+
+
+```python
+user='ea-developer'
+host='35.205.32.16'
+port='3306'
+db='ea_datalake'
+database_connection = create_engine('mysql+mysqlconnector://{0}:@{1}:{2}/{3}'.format(user, host, port, db))
+```
+
+# Configure connection with Bigquery
+
+
+```python
+bigquery_client = bigquery.Client()
+```
+
+Create a new dataset associated to the project
+
+
+```python
+dataset_id = 'shining-bearing-255613.ea'
+dataset = bigquery.Dataset(dataset_id)
+dataset.location = "EU"
+dataset = bigquery_client.create_dataset(dataset)
+```
+
+# Configure connection with Cloud Storage
+
+
+```python
+# Instantiates a client
+storage_client = storage.Client()
+
+# The name for the new bucket
+bucket_name = 'ea-datalake-dev'
+```
+
+
+```python
+def upload_blob(bucket_name, source_file_name, destination_blob_name):
+    """Uploads a file to the bucket."""
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+
+    blob.upload_from_filename(source_file_name)
+
+    print('File {} uploaded to {}.'.format(
+        source_file_name,
+        destination_blob_name))
+    
+def list_blobs(bucket_name):
+    """Lists all the blobs in the bucket."""
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(bucket_name)
+
+    blobs = bucket.list_blobs()
+
+    for blob in blobs:
+        print(blob.name)
+```
+
+# Data Quality
+
+Extract data aobut FIFA 18 players, previously loaded into our Cloud SQL database
+
+
+```python
+df_players = pd.read_sql('SELECT * FROM ea_complete_dataset', con=database_connection)
+```
+
+View some descriptive information about our dataframe
+
+
+```python
+print(df_players.shape)
+```
+
+    (17981, 74)
+
+
+
+```python
+print(df_players.columns)
+```
+
+    Index(['Name', 'Age', 'Photo', 'Nationality', 'Flag', 'Overall', 'Potential',
+           'Club', 'Club Logo', 'Value', 'Wage', 'Special', 'Acceleration',
+           'Aggression', 'Agility', 'Balance', 'Ball control', 'Composure',
+           'Crossing', 'Curve', 'Dribbling', 'Finishing', 'Free kick accuracy',
+           'GK diving', 'GK handling', 'GK kicking', 'GK positioning',
+           'GK reflexes', 'Heading accuracy', 'Interceptions', 'Jumping',
+           'Long passing', 'Long shots', 'Marking', 'Penalties', 'Positioning',
+           'Reactions', 'Short passing', 'Shot power', 'Sliding tackle',
+           'Sprint speed', 'Stamina', 'Standing tackle', 'Strength', 'Vision',
+           'Volleys', 'CAM', 'CB', 'CDM', 'CF', 'CM', 'ID', 'LAM', 'LB', 'LCB',
+           'LCM', 'LDM', 'LF', 'LM', 'LS', 'LW', 'LWB', 'Preferred Positions',
+           'RAM', 'RB', 'RCB', 'RCM', 'RDM', 'RF', 'RM', 'RS', 'RW', 'RWB', 'ST'],
+          dtype='object')
+
+
+
+```python
+df_players.head()
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Name</th>
+      <th>Age</th>
+      <th>Photo</th>
+      <th>Nationality</th>
+      <th>Flag</th>
+      <th>Overall</th>
+      <th>Potential</th>
+      <th>Club</th>
+      <th>Club Logo</th>
+      <th>Value</th>
+      <th>Wage</th>
+      <th>Special</th>
+      <th>Acceleration</th>
+      <th>Aggression</th>
+      <th>Agility</th>
+      <th>Balance</th>
+      <th>Ball control</th>
+      <th>Composure</th>
+      <th>Crossing</th>
+      <th>Curve</th>
+      <th>Dribbling</th>
+      <th>Finishing</th>
+      <th>Free kick accuracy</th>
+      <th>GK diving</th>
+      <th>GK handling</th>
+      <th>GK kicking</th>
+      <th>GK positioning</th>
+      <th>GK reflexes</th>
+      <th>Heading accuracy</th>
+      <th>Interceptions</th>
+      <th>Jumping</th>
+      <th>Long passing</th>
+      <th>Long shots</th>
+      <th>Marking</th>
+      <th>Penalties</th>
+      <th>Positioning</th>
+      <th>Reactions</th>
+      <th>Short passing</th>
+      <th>Shot power</th>
+      <th>Sliding tackle</th>
+      <th>Sprint speed</th>
+      <th>Stamina</th>
+      <th>Standing tackle</th>
+      <th>Strength</th>
+      <th>Vision</th>
+      <th>Volleys</th>
+      <th>CAM</th>
+      <th>CB</th>
+      <th>CDM</th>
+      <th>CF</th>
+      <th>CM</th>
+      <th>ID</th>
+      <th>LAM</th>
+      <th>LB</th>
+      <th>LCB</th>
+      <th>LCM</th>
+      <th>LDM</th>
+      <th>LF</th>
+      <th>LM</th>
+      <th>LS</th>
+      <th>LW</th>
+      <th>LWB</th>
+      <th>Preferred Positions</th>
+      <th>RAM</th>
+      <th>RB</th>
+      <th>RCB</th>
+      <th>RCM</th>
+      <th>RDM</th>
+      <th>RF</th>
+      <th>RM</th>
+      <th>RS</th>
+      <th>RW</th>
+      <th>RWB</th>
+      <th>ST</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>Cristiano Ronaldo</td>
+      <td>32</td>
+      <td>https://cdn.sofifa.org/48/18/players/20801.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>94</td>
+      <td>94</td>
+      <td>Real Madrid CF</td>
+      <td>https://cdn.sofifa.org/24/18/teams/243.png</td>
+      <td>€95.5M</td>
+      <td>€565K</td>
+      <td>2228</td>
+      <td>89</td>
+      <td>63</td>
+      <td>89</td>
+      <td>63</td>
+      <td>93</td>
+      <td>95</td>
+      <td>85</td>
+      <td>81</td>
+      <td>91</td>
+      <td>94</td>
+      <td>76</td>
+      <td>7</td>
+      <td>11</td>
+      <td>15</td>
+      <td>14</td>
+      <td>11</td>
+      <td>88</td>
+      <td>29</td>
+      <td>95</td>
+      <td>77</td>
+      <td>92</td>
+      <td>22</td>
+      <td>85</td>
+      <td>95</td>
+      <td>96</td>
+      <td>83</td>
+      <td>94</td>
+      <td>23</td>
+      <td>91</td>
+      <td>92</td>
+      <td>31</td>
+      <td>80</td>
+      <td>85</td>
+      <td>88</td>
+      <td>89.0</td>
+      <td>53.0</td>
+      <td>62.0</td>
+      <td>91.0</td>
+      <td>82.0</td>
+      <td>20801</td>
+      <td>89.0</td>
+      <td>61.0</td>
+      <td>53.0</td>
+      <td>82.0</td>
+      <td>62.0</td>
+      <td>91.0</td>
+      <td>89.0</td>
+      <td>92.0</td>
+      <td>91.0</td>
+      <td>66.0</td>
+      <td>ST LW</td>
+      <td>89.0</td>
+      <td>61.0</td>
+      <td>53.0</td>
+      <td>82.0</td>
+      <td>62.0</td>
+      <td>91.0</td>
+      <td>89.0</td>
+      <td>92.0</td>
+      <td>91.0</td>
+      <td>66.0</td>
+      <td>92.0</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>L. Messi</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/158023.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>93</td>
+      <td>93</td>
+      <td>FC Barcelona</td>
+      <td>https://cdn.sofifa.org/24/18/teams/241.png</td>
+      <td>€105M</td>
+      <td>€565K</td>
+      <td>2154</td>
+      <td>92</td>
+      <td>48</td>
+      <td>90</td>
+      <td>95</td>
+      <td>95</td>
+      <td>96</td>
+      <td>77</td>
+      <td>89</td>
+      <td>97</td>
+      <td>95</td>
+      <td>90</td>
+      <td>6</td>
+      <td>11</td>
+      <td>15</td>
+      <td>14</td>
+      <td>8</td>
+      <td>71</td>
+      <td>22</td>
+      <td>68</td>
+      <td>87</td>
+      <td>88</td>
+      <td>13</td>
+      <td>74</td>
+      <td>93</td>
+      <td>95</td>
+      <td>88</td>
+      <td>85</td>
+      <td>26</td>
+      <td>87</td>
+      <td>73</td>
+      <td>28</td>
+      <td>59</td>
+      <td>90</td>
+      <td>85</td>
+      <td>92.0</td>
+      <td>45.0</td>
+      <td>59.0</td>
+      <td>92.0</td>
+      <td>84.0</td>
+      <td>158023</td>
+      <td>92.0</td>
+      <td>57.0</td>
+      <td>45.0</td>
+      <td>84.0</td>
+      <td>59.0</td>
+      <td>92.0</td>
+      <td>90.0</td>
+      <td>88.0</td>
+      <td>91.0</td>
+      <td>62.0</td>
+      <td>RW</td>
+      <td>92.0</td>
+      <td>57.0</td>
+      <td>45.0</td>
+      <td>84.0</td>
+      <td>59.0</td>
+      <td>92.0</td>
+      <td>90.0</td>
+      <td>88.0</td>
+      <td>91.0</td>
+      <td>62.0</td>
+      <td>88.0</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>Neymar</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/190871.png</td>
+      <td>Brazil</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>92</td>
+      <td>94</td>
+      <td>Paris Saint-Germain</td>
+      <td>https://cdn.sofifa.org/24/18/teams/73.png</td>
+      <td>€123M</td>
+      <td>€280K</td>
+      <td>2100</td>
+      <td>94</td>
+      <td>56</td>
+      <td>96</td>
+      <td>82</td>
+      <td>95</td>
+      <td>92</td>
+      <td>75</td>
+      <td>81</td>
+      <td>96</td>
+      <td>89</td>
+      <td>84</td>
+      <td>9</td>
+      <td>9</td>
+      <td>15</td>
+      <td>15</td>
+      <td>11</td>
+      <td>62</td>
+      <td>36</td>
+      <td>61</td>
+      <td>75</td>
+      <td>77</td>
+      <td>21</td>
+      <td>81</td>
+      <td>90</td>
+      <td>88</td>
+      <td>81</td>
+      <td>80</td>
+      <td>33</td>
+      <td>90</td>
+      <td>78</td>
+      <td>24</td>
+      <td>53</td>
+      <td>80</td>
+      <td>83</td>
+      <td>88.0</td>
+      <td>46.0</td>
+      <td>59.0</td>
+      <td>88.0</td>
+      <td>79.0</td>
+      <td>190871</td>
+      <td>88.0</td>
+      <td>59.0</td>
+      <td>46.0</td>
+      <td>79.0</td>
+      <td>59.0</td>
+      <td>88.0</td>
+      <td>87.0</td>
+      <td>84.0</td>
+      <td>89.0</td>
+      <td>64.0</td>
+      <td>LW</td>
+      <td>88.0</td>
+      <td>59.0</td>
+      <td>46.0</td>
+      <td>79.0</td>
+      <td>59.0</td>
+      <td>88.0</td>
+      <td>87.0</td>
+      <td>84.0</td>
+      <td>89.0</td>
+      <td>64.0</td>
+      <td>84.0</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>L. Suárez</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/176580.png</td>
+      <td>Uruguay</td>
+      <td>https://cdn.sofifa.org/flags/60.png</td>
+      <td>92</td>
+      <td>92</td>
+      <td>FC Barcelona</td>
+      <td>https://cdn.sofifa.org/24/18/teams/241.png</td>
+      <td>€97M</td>
+      <td>€510K</td>
+      <td>2291</td>
+      <td>88</td>
+      <td>78</td>
+      <td>86</td>
+      <td>60</td>
+      <td>91</td>
+      <td>83</td>
+      <td>77</td>
+      <td>86</td>
+      <td>86</td>
+      <td>94</td>
+      <td>84</td>
+      <td>27</td>
+      <td>25</td>
+      <td>31</td>
+      <td>33</td>
+      <td>37</td>
+      <td>77</td>
+      <td>41</td>
+      <td>69</td>
+      <td>64</td>
+      <td>86</td>
+      <td>30</td>
+      <td>85</td>
+      <td>92</td>
+      <td>93</td>
+      <td>83</td>
+      <td>87</td>
+      <td>38</td>
+      <td>77</td>
+      <td>89</td>
+      <td>45</td>
+      <td>80</td>
+      <td>84</td>
+      <td>88</td>
+      <td>87.0</td>
+      <td>58.0</td>
+      <td>65.0</td>
+      <td>88.0</td>
+      <td>80.0</td>
+      <td>176580</td>
+      <td>87.0</td>
+      <td>64.0</td>
+      <td>58.0</td>
+      <td>80.0</td>
+      <td>65.0</td>
+      <td>88.0</td>
+      <td>85.0</td>
+      <td>88.0</td>
+      <td>87.0</td>
+      <td>68.0</td>
+      <td>ST</td>
+      <td>87.0</td>
+      <td>64.0</td>
+      <td>58.0</td>
+      <td>80.0</td>
+      <td>65.0</td>
+      <td>88.0</td>
+      <td>85.0</td>
+      <td>88.0</td>
+      <td>87.0</td>
+      <td>68.0</td>
+      <td>88.0</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>M. Neuer</td>
+      <td>31</td>
+      <td>https://cdn.sofifa.org/48/18/players/167495.png</td>
+      <td>Germany</td>
+      <td>https://cdn.sofifa.org/flags/21.png</td>
+      <td>92</td>
+      <td>92</td>
+      <td>FC Bayern Munich</td>
+      <td>https://cdn.sofifa.org/24/18/teams/21.png</td>
+      <td>€61M</td>
+      <td>€230K</td>
+      <td>1493</td>
+      <td>58</td>
+      <td>29</td>
+      <td>52</td>
+      <td>35</td>
+      <td>48</td>
+      <td>70</td>
+      <td>15</td>
+      <td>14</td>
+      <td>30</td>
+      <td>13</td>
+      <td>11</td>
+      <td>91</td>
+      <td>90</td>
+      <td>95</td>
+      <td>91</td>
+      <td>89</td>
+      <td>25</td>
+      <td>30</td>
+      <td>78</td>
+      <td>59</td>
+      <td>16</td>
+      <td>10</td>
+      <td>47</td>
+      <td>12</td>
+      <td>85</td>
+      <td>55</td>
+      <td>25</td>
+      <td>11</td>
+      <td>61</td>
+      <td>44</td>
+      <td>10</td>
+      <td>83</td>
+      <td>70</td>
+      <td>11</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>167495</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+
+```python
+df_players.describe()
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Age</th>
+      <th>Overall</th>
+      <th>Potential</th>
+      <th>Special</th>
+      <th>CAM</th>
+      <th>CB</th>
+      <th>CDM</th>
+      <th>CF</th>
+      <th>CM</th>
+      <th>ID</th>
+      <th>LAM</th>
+      <th>LB</th>
+      <th>LCB</th>
+      <th>LCM</th>
+      <th>LDM</th>
+      <th>LF</th>
+      <th>LM</th>
+      <th>LS</th>
+      <th>LW</th>
+      <th>LWB</th>
+      <th>RAM</th>
+      <th>RB</th>
+      <th>RCB</th>
+      <th>RCM</th>
+      <th>RDM</th>
+      <th>RF</th>
+      <th>RM</th>
+      <th>RS</th>
+      <th>RW</th>
+      <th>RWB</th>
+      <th>ST</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>count</th>
+      <td>17981.000000</td>
+      <td>17981.000000</td>
+      <td>17981.000000</td>
+      <td>17981.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>17981.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+      <td>15952.000000</td>
+    </tr>
+    <tr>
+      <th>mean</th>
+      <td>25.144541</td>
+      <td>66.247984</td>
+      <td>71.190813</td>
+      <td>1594.095100</td>
+      <td>59.251755</td>
+      <td>55.550464</td>
+      <td>56.865283</td>
+      <td>59.030028</td>
+      <td>58.506833</td>
+      <td>207658.710138</td>
+      <td>59.251755</td>
+      <td>56.979689</td>
+      <td>55.550464</td>
+      <td>58.506833</td>
+      <td>56.865283</td>
+      <td>59.030028</td>
+      <td>60.057736</td>
+      <td>58.204050</td>
+      <td>59.359265</td>
+      <td>57.698721</td>
+      <td>59.251755</td>
+      <td>56.979689</td>
+      <td>55.550464</td>
+      <td>58.506833</td>
+      <td>56.865283</td>
+      <td>59.030028</td>
+      <td>60.057736</td>
+      <td>58.204050</td>
+      <td>59.359265</td>
+      <td>57.698721</td>
+      <td>58.204050</td>
+    </tr>
+    <tr>
+      <th>std</th>
+      <td>4.614272</td>
+      <td>6.987965</td>
+      <td>6.102199</td>
+      <td>272.151435</td>
+      <td>9.880164</td>
+      <td>12.192579</td>
+      <td>10.310178</td>
+      <td>9.926988</td>
+      <td>8.888040</td>
+      <td>32291.667313</td>
+      <td>9.880164</td>
+      <td>9.791627</td>
+      <td>12.192579</td>
+      <td>8.888040</td>
+      <td>10.310178</td>
+      <td>9.926988</td>
+      <td>9.349180</td>
+      <td>9.181392</td>
+      <td>9.978084</td>
+      <td>9.142825</td>
+      <td>9.880164</td>
+      <td>9.791627</td>
+      <td>12.192579</td>
+      <td>8.888040</td>
+      <td>10.310178</td>
+      <td>9.926988</td>
+      <td>9.349180</td>
+      <td>9.181392</td>
+      <td>9.978084</td>
+      <td>9.142825</td>
+      <td>9.181392</td>
+    </tr>
+    <tr>
+      <th>min</th>
+      <td>16.000000</td>
+      <td>46.000000</td>
+      <td>46.000000</td>
+      <td>728.000000</td>
+      <td>27.000000</td>
+      <td>25.000000</td>
+      <td>26.000000</td>
+      <td>27.000000</td>
+      <td>30.000000</td>
+      <td>16.000000</td>
+      <td>27.000000</td>
+      <td>30.000000</td>
+      <td>25.000000</td>
+      <td>30.000000</td>
+      <td>26.000000</td>
+      <td>27.000000</td>
+      <td>28.000000</td>
+      <td>31.000000</td>
+      <td>26.000000</td>
+      <td>31.000000</td>
+      <td>27.000000</td>
+      <td>30.000000</td>
+      <td>25.000000</td>
+      <td>30.000000</td>
+      <td>26.000000</td>
+      <td>27.000000</td>
+      <td>28.000000</td>
+      <td>31.000000</td>
+      <td>26.000000</td>
+      <td>31.000000</td>
+      <td>31.000000</td>
+    </tr>
+    <tr>
+      <th>25%</th>
+      <td>21.000000</td>
+      <td>62.000000</td>
+      <td>67.000000</td>
+      <td>1449.000000</td>
+      <td>53.000000</td>
+      <td>45.000000</td>
+      <td>49.000000</td>
+      <td>53.000000</td>
+      <td>53.000000</td>
+      <td>192622.000000</td>
+      <td>53.000000</td>
+      <td>50.000000</td>
+      <td>45.000000</td>
+      <td>53.000000</td>
+      <td>49.000000</td>
+      <td>53.000000</td>
+      <td>54.000000</td>
+      <td>52.000000</td>
+      <td>53.000000</td>
+      <td>51.000000</td>
+      <td>53.000000</td>
+      <td>50.000000</td>
+      <td>45.000000</td>
+      <td>53.000000</td>
+      <td>49.000000</td>
+      <td>53.000000</td>
+      <td>54.000000</td>
+      <td>52.000000</td>
+      <td>53.000000</td>
+      <td>51.000000</td>
+      <td>52.000000</td>
+    </tr>
+    <tr>
+      <th>50%</th>
+      <td>25.000000</td>
+      <td>66.000000</td>
+      <td>71.000000</td>
+      <td>1633.000000</td>
+      <td>60.000000</td>
+      <td>57.000000</td>
+      <td>58.000000</td>
+      <td>60.000000</td>
+      <td>59.000000</td>
+      <td>214057.000000</td>
+      <td>60.000000</td>
+      <td>58.000000</td>
+      <td>57.000000</td>
+      <td>59.000000</td>
+      <td>58.000000</td>
+      <td>60.000000</td>
+      <td>61.000000</td>
+      <td>59.000000</td>
+      <td>60.000000</td>
+      <td>58.000000</td>
+      <td>60.000000</td>
+      <td>58.000000</td>
+      <td>57.000000</td>
+      <td>59.000000</td>
+      <td>58.000000</td>
+      <td>60.000000</td>
+      <td>61.000000</td>
+      <td>59.000000</td>
+      <td>60.000000</td>
+      <td>58.000000</td>
+      <td>59.000000</td>
+    </tr>
+    <tr>
+      <th>75%</th>
+      <td>28.000000</td>
+      <td>71.000000</td>
+      <td>75.000000</td>
+      <td>1786.000000</td>
+      <td>66.000000</td>
+      <td>65.000000</td>
+      <td>65.000000</td>
+      <td>66.000000</td>
+      <td>65.000000</td>
+      <td>231448.000000</td>
+      <td>66.000000</td>
+      <td>64.000000</td>
+      <td>65.000000</td>
+      <td>65.000000</td>
+      <td>65.000000</td>
+      <td>66.000000</td>
+      <td>67.000000</td>
+      <td>65.000000</td>
+      <td>66.000000</td>
+      <td>64.000000</td>
+      <td>66.000000</td>
+      <td>64.000000</td>
+      <td>65.000000</td>
+      <td>65.000000</td>
+      <td>65.000000</td>
+      <td>66.000000</td>
+      <td>67.000000</td>
+      <td>65.000000</td>
+      <td>66.000000</td>
+      <td>64.000000</td>
+      <td>65.000000</td>
+    </tr>
+    <tr>
+      <th>max</th>
+      <td>47.000000</td>
+      <td>94.000000</td>
+      <td>94.000000</td>
+      <td>2291.000000</td>
+      <td>92.000000</td>
+      <td>87.000000</td>
+      <td>85.000000</td>
+      <td>92.000000</td>
+      <td>87.000000</td>
+      <td>241219.000000</td>
+      <td>92.000000</td>
+      <td>84.000000</td>
+      <td>87.000000</td>
+      <td>87.000000</td>
+      <td>85.000000</td>
+      <td>92.000000</td>
+      <td>90.000000</td>
+      <td>92.000000</td>
+      <td>91.000000</td>
+      <td>84.000000</td>
+      <td>92.000000</td>
+      <td>84.000000</td>
+      <td>87.000000</td>
+      <td>87.000000</td>
+      <td>85.000000</td>
+      <td>92.000000</td>
+      <td>90.000000</td>
+      <td>92.000000</td>
+      <td>91.000000</td>
+      <td>84.000000</td>
+      <td>92.000000</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+### Summary table with detailed information about each field/column
+
+* Data type
+
+* Count of missing values
+
+* Count of present values
+
+* Number of unique values
+
+* Minimum value
+
+* Maximum value
+
+* Mean value
+
+* Median value
+
+
+```python
+df_summary_dicc  = pd.DataFrame(columns=list(df_players.keys())).transpose()
+df_summary_types = pd.DataFrame(df_players.dtypes).rename(columns = {0:'dtypes'})
+df_summary_count = pd.DataFrame(df_players.count()).rename(columns = {0:'present_values'})
+df_summary_nulls = pd.DataFrame(df_players.isnull().sum()).rename(columns = {0:'null_values'})
+df_summary_unique= pd.DataFrame(df_players.nunique()).rename(columns = {0:'unique_values'})
+df_summary_min   = pd.DataFrame(df_players.min()).rename(columns = {0:'min_value'})
+df_summary_max   = pd.DataFrame(df_players.max()).rename(columns = {0:'max_value'})
+df_summary_mean  = pd.DataFrame(df_players.mean()).rename(columns = {0:'mean_value'})
+df_summary_median= pd.DataFrame(df_players.median()).rename(columns = {0:'median_value'})
+df_summary = df_summary_dicc.join(df_summary_types).join(df_summary_count).join(df_summary_nulls)
+df_summary['total_values'] = df_summary['present_values'] + df_summary['null_values']
+df_summary = df_summary.join(df_summary_unique).join(df_summary_min).join(df_summary_max)
+df_summary = df_summary.join(df_summary_mean).join(df_summary_median)
+df_summary
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>dtypes</th>
+      <th>present_values</th>
+      <th>null_values</th>
+      <th>total_values</th>
+      <th>unique_values</th>
+      <th>min_value</th>
+      <th>max_value</th>
+      <th>mean_value</th>
+      <th>median_value</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>Name</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>16975</td>
+      <td>A. Abbas</td>
+      <td>Óscar Whalley</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Age</th>
+      <td>int64</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>29</td>
+      <td>16</td>
+      <td>47</td>
+      <td>25.144541</td>
+      <td>25.0</td>
+    </tr>
+    <tr>
+      <th>Photo</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>17929</td>
+      <td>https://cdn.sofifa.org/48/18/players/101317.png</td>
+      <td>https://cdn.sofifa.org/48/18/players/9833.png</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Nationality</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>165</td>
+      <td>Afghanistan</td>
+      <td>Zimbabwe</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Flag</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>165</td>
+      <td>https://cdn.sofifa.org/flags/1.png</td>
+      <td>https://cdn.sofifa.org/flags/99.png</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Overall</th>
+      <td>int64</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>49</td>
+      <td>46</td>
+      <td>94</td>
+      <td>66.247984</td>
+      <td>66.0</td>
+    </tr>
+    <tr>
+      <th>Potential</th>
+      <td>int64</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>48</td>
+      <td>46</td>
+      <td>94</td>
+      <td>71.190813</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>Club</th>
+      <td>object</td>
+      <td>17733</td>
+      <td>248</td>
+      <td>17981</td>
+      <td>647</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Club Logo</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>679</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1.png</td>
+      <td>https://cdn.sofifa.org/flags/9.png</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Value</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>207</td>
+      <td>€0</td>
+      <td>€9M</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Wage</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>142</td>
+      <td>€0</td>
+      <td>€9K</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Special</th>
+      <td>int64</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>1396</td>
+      <td>728</td>
+      <td>2291</td>
+      <td>1594.095100</td>
+      <td>1633.0</td>
+    </tr>
+    <tr>
+      <th>Acceleration</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>161</td>
+      <td>11</td>
+      <td>96</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Aggression</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>151</td>
+      <td>11</td>
+      <td>96</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Agility</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>146</td>
+      <td>14</td>
+      <td>96</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Balance</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>135</td>
+      <td>11</td>
+      <td>96</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Ball control</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>184</td>
+      <td>10</td>
+      <td>95</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Composure</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>161</td>
+      <td>11</td>
+      <td>96</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Crossing</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>176</td>
+      <td>10</td>
+      <td>91</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Curve</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>153</td>
+      <td>10</td>
+      <td>92</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Dribbling</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>194</td>
+      <td>10</td>
+      <td>97</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Finishing</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>187</td>
+      <td>10</td>
+      <td>95</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Free kick accuracy</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>136</td>
+      <td>10</td>
+      <td>93</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>GK diving</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>100</td>
+      <td>1</td>
+      <td>91</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>GK handling</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>97</td>
+      <td>1</td>
+      <td>91</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>GK kicking</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>103</td>
+      <td>1</td>
+      <td>95</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>GK positioning</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>99</td>
+      <td>1</td>
+      <td>91</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>GK reflexes</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>102</td>
+      <td>1</td>
+      <td>90</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Heading accuracy</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>158</td>
+      <td>10</td>
+      <td>94</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Interceptions</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>174</td>
+      <td>10</td>
+      <td>92</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>Vision</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>173</td>
+      <td>10</td>
+      <td>94</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>Volleys</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>125</td>
+      <td>10</td>
+      <td>91</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>CAM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>64</td>
+      <td>27</td>
+      <td>92</td>
+      <td>59.251755</td>
+      <td>60.0</td>
+    </tr>
+    <tr>
+      <th>CB</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>62</td>
+      <td>25</td>
+      <td>87</td>
+      <td>55.550464</td>
+      <td>57.0</td>
+    </tr>
+    <tr>
+      <th>CDM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>59</td>
+      <td>26</td>
+      <td>85</td>
+      <td>56.865283</td>
+      <td>58.0</td>
+    </tr>
+    <tr>
+      <th>CF</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>64</td>
+      <td>27</td>
+      <td>92</td>
+      <td>59.030028</td>
+      <td>60.0</td>
+    </tr>
+    <tr>
+      <th>CM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>58</td>
+      <td>30</td>
+      <td>87</td>
+      <td>58.506833</td>
+      <td>59.0</td>
+    </tr>
+    <tr>
+      <th>ID</th>
+      <td>int64</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>17929</td>
+      <td>16</td>
+      <td>241219</td>
+      <td>207658.710138</td>
+      <td>214057.0</td>
+    </tr>
+    <tr>
+      <th>LAM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>64</td>
+      <td>27</td>
+      <td>92</td>
+      <td>59.251755</td>
+      <td>60.0</td>
+    </tr>
+    <tr>
+      <th>LB</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>55</td>
+      <td>30</td>
+      <td>84</td>
+      <td>56.979689</td>
+      <td>58.0</td>
+    </tr>
+    <tr>
+      <th>LCB</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>62</td>
+      <td>25</td>
+      <td>87</td>
+      <td>55.550464</td>
+      <td>57.0</td>
+    </tr>
+    <tr>
+      <th>LCM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>58</td>
+      <td>30</td>
+      <td>87</td>
+      <td>58.506833</td>
+      <td>59.0</td>
+    </tr>
+    <tr>
+      <th>LDM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>59</td>
+      <td>26</td>
+      <td>85</td>
+      <td>56.865283</td>
+      <td>58.0</td>
+    </tr>
+    <tr>
+      <th>LF</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>64</td>
+      <td>27</td>
+      <td>92</td>
+      <td>59.030028</td>
+      <td>60.0</td>
+    </tr>
+    <tr>
+      <th>LM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>61</td>
+      <td>28</td>
+      <td>90</td>
+      <td>60.057736</td>
+      <td>61.0</td>
+    </tr>
+    <tr>
+      <th>LS</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>59</td>
+      <td>31</td>
+      <td>92</td>
+      <td>58.204050</td>
+      <td>59.0</td>
+    </tr>
+    <tr>
+      <th>LW</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>64</td>
+      <td>26</td>
+      <td>91</td>
+      <td>59.359265</td>
+      <td>60.0</td>
+    </tr>
+    <tr>
+      <th>LWB</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>54</td>
+      <td>31</td>
+      <td>84</td>
+      <td>57.698721</td>
+      <td>58.0</td>
+    </tr>
+    <tr>
+      <th>Preferred Positions</th>
+      <td>object</td>
+      <td>17981</td>
+      <td>0</td>
+      <td>17981</td>
+      <td>802</td>
+      <td>CAM</td>
+      <td>ST RW RM</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>RAM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>64</td>
+      <td>27</td>
+      <td>92</td>
+      <td>59.251755</td>
+      <td>60.0</td>
+    </tr>
+    <tr>
+      <th>RB</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>55</td>
+      <td>30</td>
+      <td>84</td>
+      <td>56.979689</td>
+      <td>58.0</td>
+    </tr>
+    <tr>
+      <th>RCB</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>62</td>
+      <td>25</td>
+      <td>87</td>
+      <td>55.550464</td>
+      <td>57.0</td>
+    </tr>
+    <tr>
+      <th>RCM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>58</td>
+      <td>30</td>
+      <td>87</td>
+      <td>58.506833</td>
+      <td>59.0</td>
+    </tr>
+    <tr>
+      <th>RDM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>59</td>
+      <td>26</td>
+      <td>85</td>
+      <td>56.865283</td>
+      <td>58.0</td>
+    </tr>
+    <tr>
+      <th>RF</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>64</td>
+      <td>27</td>
+      <td>92</td>
+      <td>59.030028</td>
+      <td>60.0</td>
+    </tr>
+    <tr>
+      <th>RM</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>61</td>
+      <td>28</td>
+      <td>90</td>
+      <td>60.057736</td>
+      <td>61.0</td>
+    </tr>
+    <tr>
+      <th>RS</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>59</td>
+      <td>31</td>
+      <td>92</td>
+      <td>58.204050</td>
+      <td>59.0</td>
+    </tr>
+    <tr>
+      <th>RW</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>64</td>
+      <td>26</td>
+      <td>91</td>
+      <td>59.359265</td>
+      <td>60.0</td>
+    </tr>
+    <tr>
+      <th>RWB</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>54</td>
+      <td>31</td>
+      <td>84</td>
+      <td>57.698721</td>
+      <td>58.0</td>
+    </tr>
+    <tr>
+      <th>ST</th>
+      <td>float64</td>
+      <td>15952</td>
+      <td>2029</td>
+      <td>17981</td>
+      <td>59</td>
+      <td>31</td>
+      <td>92</td>
+      <td>58.204050</td>
+      <td>59.0</td>
+    </tr>
+  </tbody>
+</table>
+<p>74 rows × 9 columns</p>
+</div>
+
+
+
+### Missing values
+
+Registers with some fields without information
+
+
+```python
+df_players[df_players.isnull().any(axis=1)]
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Name</th>
+      <th>Age</th>
+      <th>Photo</th>
+      <th>Nationality</th>
+      <th>Flag</th>
+      <th>Overall</th>
+      <th>Potential</th>
+      <th>Club</th>
+      <th>Club Logo</th>
+      <th>Value</th>
+      <th>Wage</th>
+      <th>Special</th>
+      <th>Acceleration</th>
+      <th>Aggression</th>
+      <th>Agility</th>
+      <th>Balance</th>
+      <th>Ball control</th>
+      <th>Composure</th>
+      <th>Crossing</th>
+      <th>Curve</th>
+      <th>Dribbling</th>
+      <th>Finishing</th>
+      <th>Free kick accuracy</th>
+      <th>GK diving</th>
+      <th>GK handling</th>
+      <th>GK kicking</th>
+      <th>GK positioning</th>
+      <th>GK reflexes</th>
+      <th>Heading accuracy</th>
+      <th>Interceptions</th>
+      <th>Jumping</th>
+      <th>Long passing</th>
+      <th>Long shots</th>
+      <th>Marking</th>
+      <th>Penalties</th>
+      <th>Positioning</th>
+      <th>Reactions</th>
+      <th>Short passing</th>
+      <th>Shot power</th>
+      <th>Sliding tackle</th>
+      <th>Sprint speed</th>
+      <th>Stamina</th>
+      <th>Standing tackle</th>
+      <th>Strength</th>
+      <th>Vision</th>
+      <th>Volleys</th>
+      <th>CAM</th>
+      <th>CB</th>
+      <th>CDM</th>
+      <th>CF</th>
+      <th>CM</th>
+      <th>ID</th>
+      <th>LAM</th>
+      <th>LB</th>
+      <th>LCB</th>
+      <th>LCM</th>
+      <th>LDM</th>
+      <th>LF</th>
+      <th>LM</th>
+      <th>LS</th>
+      <th>LW</th>
+      <th>LWB</th>
+      <th>Preferred Positions</th>
+      <th>RAM</th>
+      <th>RB</th>
+      <th>RCB</th>
+      <th>RCM</th>
+      <th>RDM</th>
+      <th>RF</th>
+      <th>RM</th>
+      <th>RS</th>
+      <th>RW</th>
+      <th>RWB</th>
+      <th>ST</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>4</th>
+      <td>M. Neuer</td>
+      <td>31</td>
+      <td>https://cdn.sofifa.org/48/18/players/167495.png</td>
+      <td>Germany</td>
+      <td>https://cdn.sofifa.org/flags/21.png</td>
+      <td>92</td>
+      <td>92</td>
+      <td>FC Bayern Munich</td>
+      <td>https://cdn.sofifa.org/24/18/teams/21.png</td>
+      <td>€61M</td>
+      <td>€230K</td>
+      <td>1493</td>
+      <td>58</td>
+      <td>29</td>
+      <td>52</td>
+      <td>35</td>
+      <td>48</td>
+      <td>70</td>
+      <td>15</td>
+      <td>14</td>
+      <td>30</td>
+      <td>13</td>
+      <td>11</td>
+      <td>91</td>
+      <td>90</td>
+      <td>95</td>
+      <td>91</td>
+      <td>89</td>
+      <td>25</td>
+      <td>30</td>
+      <td>78</td>
+      <td>59</td>
+      <td>16</td>
+      <td>10</td>
+      <td>47</td>
+      <td>12</td>
+      <td>85</td>
+      <td>55</td>
+      <td>25</td>
+      <td>11</td>
+      <td>61</td>
+      <td>44</td>
+      <td>10</td>
+      <td>83</td>
+      <td>70</td>
+      <td>11</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>167495</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>De Gea</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/193080.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>90</td>
+      <td>92</td>
+      <td>Manchester United</td>
+      <td>https://cdn.sofifa.org/24/18/teams/11.png</td>
+      <td>€64.5M</td>
+      <td>€215K</td>
+      <td>1458</td>
+      <td>57</td>
+      <td>38</td>
+      <td>60</td>
+      <td>43</td>
+      <td>42</td>
+      <td>64</td>
+      <td>17</td>
+      <td>21</td>
+      <td>18</td>
+      <td>13</td>
+      <td>19</td>
+      <td>90</td>
+      <td>85</td>
+      <td>87</td>
+      <td>86</td>
+      <td>90</td>
+      <td>21</td>
+      <td>30</td>
+      <td>67</td>
+      <td>51</td>
+      <td>12</td>
+      <td>13</td>
+      <td>40</td>
+      <td>12</td>
+      <td>88</td>
+      <td>50</td>
+      <td>31</td>
+      <td>13</td>
+      <td>58</td>
+      <td>40</td>
+      <td>21</td>
+      <td>64</td>
+      <td>68</td>
+      <td>13</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>193080</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>T. Courtois</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/192119.png</td>
+      <td>Belgium</td>
+      <td>https://cdn.sofifa.org/flags/7.png</td>
+      <td>89</td>
+      <td>92</td>
+      <td>Chelsea</td>
+      <td>https://cdn.sofifa.org/24/18/teams/5.png</td>
+      <td>€59M</td>
+      <td>€190K</td>
+      <td>1282</td>
+      <td>46</td>
+      <td>23</td>
+      <td>61</td>
+      <td>45</td>
+      <td>23</td>
+      <td>52</td>
+      <td>14</td>
+      <td>19</td>
+      <td>13</td>
+      <td>14</td>
+      <td>11</td>
+      <td>85</td>
+      <td>91</td>
+      <td>69</td>
+      <td>86</td>
+      <td>88</td>
+      <td>13</td>
+      <td>15</td>
+      <td>68</td>
+      <td>31</td>
+      <td>17</td>
+      <td>11</td>
+      <td>27</td>
+      <td>13</td>
+      <td>81</td>
+      <td>32</td>
+      <td>36</td>
+      <td>16</td>
+      <td>52</td>
+      <td>38</td>
+      <td>18</td>
+      <td>70</td>
+      <td>44</td>
+      <td>12</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>192119</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>G. Buffon</td>
+      <td>39</td>
+      <td>https://cdn.sofifa.org/48/18/players/1179.png</td>
+      <td>Italy</td>
+      <td>https://cdn.sofifa.org/flags/27.png</td>
+      <td>89</td>
+      <td>89</td>
+      <td>Juventus</td>
+      <td>https://cdn.sofifa.org/24/18/teams/45.png</td>
+      <td>€4.5M</td>
+      <td>€110K</td>
+      <td>1335</td>
+      <td>49</td>
+      <td>38</td>
+      <td>55</td>
+      <td>49</td>
+      <td>28</td>
+      <td>70</td>
+      <td>13</td>
+      <td>20</td>
+      <td>26</td>
+      <td>15</td>
+      <td>13</td>
+      <td>89</td>
+      <td>88</td>
+      <td>74</td>
+      <td>90</td>
+      <td>84</td>
+      <td>13</td>
+      <td>28</td>
+      <td>75</td>
+      <td>35</td>
+      <td>13</td>
+      <td>10</td>
+      <td>22</td>
+      <td>12</td>
+      <td>80</td>
+      <td>37</td>
+      <td>39</td>
+      <td>11</td>
+      <td>43</td>
+      <td>39</td>
+      <td>11</td>
+      <td>69</td>
+      <td>50</td>
+      <td>17</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>1179</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>J. Oblak</td>
+      <td>24</td>
+      <td>https://cdn.sofifa.org/48/18/players/200389.png</td>
+      <td>Slovenia</td>
+      <td>https://cdn.sofifa.org/flags/44.png</td>
+      <td>88</td>
+      <td>93</td>
+      <td>Atlético Madrid</td>
+      <td>https://cdn.sofifa.org/24/18/teams/240.png</td>
+      <td>€57M</td>
+      <td>€82K</td>
+      <td>1290</td>
+      <td>43</td>
+      <td>34</td>
+      <td>67</td>
+      <td>49</td>
+      <td>16</td>
+      <td>55</td>
+      <td>13</td>
+      <td>13</td>
+      <td>12</td>
+      <td>11</td>
+      <td>14</td>
+      <td>84</td>
+      <td>90</td>
+      <td>77</td>
+      <td>87</td>
+      <td>84</td>
+      <td>15</td>
+      <td>19</td>
+      <td>76</td>
+      <td>26</td>
+      <td>12</td>
+      <td>14</td>
+      <td>11</td>
+      <td>11</td>
+      <td>84</td>
+      <td>29</td>
+      <td>22</td>
+      <td>18</td>
+      <td>60</td>
+      <td>41</td>
+      <td>12</td>
+      <td>78</td>
+      <td>55</td>
+      <td>13</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>200389</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>29</th>
+      <td>H. Lloris</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/167948.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>88</td>
+      <td>88</td>
+      <td>Tottenham Hotspur</td>
+      <td>https://cdn.sofifa.org/24/18/teams/18.png</td>
+      <td>€38M</td>
+      <td>€165K</td>
+      <td>1318</td>
+      <td>65</td>
+      <td>31</td>
+      <td>55</td>
+      <td>54</td>
+      <td>34</td>
+      <td>61</td>
+      <td>13</td>
+      <td>11</td>
+      <td>10</td>
+      <td>10</td>
+      <td>10</td>
+      <td>88</td>
+      <td>86</td>
+      <td>68</td>
+      <td>82</td>
+      <td>90</td>
+      <td>10</td>
+      <td>27</td>
+      <td>74</td>
+      <td>50</td>
+      <td>14</td>
+      <td>12</td>
+      <td>40</td>
+      <td>10</td>
+      <td>85</td>
+      <td>50</td>
+      <td>23</td>
+      <td>18</td>
+      <td>63</td>
+      <td>41</td>
+      <td>10</td>
+      <td>43</td>
+      <td>30</td>
+      <td>11</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>167948</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>43</th>
+      <td>S. Handanovič</td>
+      <td>32</td>
+      <td>https://cdn.sofifa.org/48/18/players/162835.png</td>
+      <td>Slovenia</td>
+      <td>https://cdn.sofifa.org/flags/44.png</td>
+      <td>87</td>
+      <td>87</td>
+      <td>Inter</td>
+      <td>https://cdn.sofifa.org/24/18/teams/44.png</td>
+      <td>€29M</td>
+      <td>€91K</td>
+      <td>1264</td>
+      <td>54</td>
+      <td>25</td>
+      <td>42</td>
+      <td>36</td>
+      <td>24</td>
+      <td>62</td>
+      <td>12</td>
+      <td>12</td>
+      <td>18</td>
+      <td>10</td>
+      <td>14</td>
+      <td>87</td>
+      <td>86</td>
+      <td>69</td>
+      <td>87</td>
+      <td>87</td>
+      <td>10</td>
+      <td>22</td>
+      <td>78</td>
+      <td>34</td>
+      <td>19</td>
+      <td>17</td>
+      <td>23</td>
+      <td>12</td>
+      <td>83</td>
+      <td>36</td>
+      <td>22</td>
+      <td>13</td>
+      <td>57</td>
+      <td>41</td>
+      <td>10</td>
+      <td>71</td>
+      <td>41</td>
+      <td>12</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>162835</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>68</th>
+      <td>P. Čech</td>
+      <td>35</td>
+      <td>https://cdn.sofifa.org/48/18/players/48940.png</td>
+      <td>Czech Republic</td>
+      <td>https://cdn.sofifa.org/flags/12.png</td>
+      <td>86</td>
+      <td>86</td>
+      <td>Arsenal</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1.png</td>
+      <td>€10.5M</td>
+      <td>€92K</td>
+      <td>1206</td>
+      <td>40</td>
+      <td>17</td>
+      <td>49</td>
+      <td>34</td>
+      <td>22</td>
+      <td>70</td>
+      <td>19</td>
+      <td>13</td>
+      <td>12</td>
+      <td>12</td>
+      <td>19</td>
+      <td>82</td>
+      <td>87</td>
+      <td>76</td>
+      <td>83</td>
+      <td>81</td>
+      <td>19</td>
+      <td>23</td>
+      <td>51</td>
+      <td>33</td>
+      <td>11</td>
+      <td>11</td>
+      <td>23</td>
+      <td>13</td>
+      <td>84</td>
+      <td>35</td>
+      <td>21</td>
+      <td>12</td>
+      <td>44</td>
+      <td>32</td>
+      <td>13</td>
+      <td>65</td>
+      <td>53</td>
+      <td>17</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>48940</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>74</th>
+      <td>K. Navas</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/193041.png</td>
+      <td>Costa Rica</td>
+      <td>https://cdn.sofifa.org/flags/72.png</td>
+      <td>85</td>
+      <td>85</td>
+      <td>Real Madrid CF</td>
+      <td>https://cdn.sofifa.org/24/18/teams/243.png</td>
+      <td>€24.5M</td>
+      <td>€165K</td>
+      <td>1301</td>
+      <td>54</td>
+      <td>32</td>
+      <td>60</td>
+      <td>61</td>
+      <td>19</td>
+      <td>49</td>
+      <td>11</td>
+      <td>11</td>
+      <td>16</td>
+      <td>15</td>
+      <td>15</td>
+      <td>87</td>
+      <td>82</td>
+      <td>72</td>
+      <td>80</td>
+      <td>85</td>
+      <td>11</td>
+      <td>20</td>
+      <td>74</td>
+      <td>37</td>
+      <td>13</td>
+      <td>12</td>
+      <td>25</td>
+      <td>16</td>
+      <td>82</td>
+      <td>30</td>
+      <td>21</td>
+      <td>14</td>
+      <td>53</td>
+      <td>39</td>
+      <td>14</td>
+      <td>75</td>
+      <td>54</td>
+      <td>11</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>193041</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>76</th>
+      <td>D. Subašić</td>
+      <td>32</td>
+      <td>https://cdn.sofifa.org/48/18/players/192593.png</td>
+      <td>Croatia</td>
+      <td>https://cdn.sofifa.org/flags/10.png</td>
+      <td>85</td>
+      <td>85</td>
+      <td>AS Monaco</td>
+      <td>https://cdn.sofifa.org/24/18/teams/69.png</td>
+      <td>€22M</td>
+      <td>€46K</td>
+      <td>1305</td>
+      <td>51</td>
+      <td>31</td>
+      <td>42</td>
+      <td>37</td>
+      <td>19</td>
+      <td>65</td>
+      <td>11</td>
+      <td>24</td>
+      <td>11</td>
+      <td>10</td>
+      <td>66</td>
+      <td>84</td>
+      <td>79</td>
+      <td>79</td>
+      <td>85</td>
+      <td>87</td>
+      <td>13</td>
+      <td>20</td>
+      <td>75</td>
+      <td>26</td>
+      <td>14</td>
+      <td>15</td>
+      <td>23</td>
+      <td>15</td>
+      <td>82</td>
+      <td>24</td>
+      <td>24</td>
+      <td>13</td>
+      <td>54</td>
+      <td>32</td>
+      <td>14</td>
+      <td>80</td>
+      <td>52</td>
+      <td>13</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>192593</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>77</th>
+      <td>B. Leno</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/192563.png</td>
+      <td>Germany</td>
+      <td>https://cdn.sofifa.org/flags/21.png</td>
+      <td>85</td>
+      <td>88</td>
+      <td>Bayer 04 Leverkusen</td>
+      <td>https://cdn.sofifa.org/24/18/teams/32.png</td>
+      <td>€34M</td>
+      <td>€61K</td>
+      <td>1247</td>
+      <td>46</td>
+      <td>28</td>
+      <td>52</td>
+      <td>44</td>
+      <td>22</td>
+      <td>62</td>
+      <td>9</td>
+      <td>9</td>
+      <td>16</td>
+      <td>9</td>
+      <td>8</td>
+      <td>85</td>
+      <td>84</td>
+      <td>74</td>
+      <td>85</td>
+      <td>83</td>
+      <td>13</td>
+      <td>22</td>
+      <td>73</td>
+      <td>33</td>
+      <td>14</td>
+      <td>8</td>
+      <td>23</td>
+      <td>7</td>
+      <td>81</td>
+      <td>37</td>
+      <td>23</td>
+      <td>18</td>
+      <td>52</td>
+      <td>43</td>
+      <td>15</td>
+      <td>68</td>
+      <td>53</td>
+      <td>10</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>192563</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>78</th>
+      <td>M. ter Stegen</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/192448.png</td>
+      <td>Germany</td>
+      <td>https://cdn.sofifa.org/flags/21.png</td>
+      <td>85</td>
+      <td>89</td>
+      <td>FC Barcelona</td>
+      <td>https://cdn.sofifa.org/24/18/teams/241.png</td>
+      <td>€35.5M</td>
+      <td>€155K</td>
+      <td>1274</td>
+      <td>38</td>
+      <td>43</td>
+      <td>37</td>
+      <td>43</td>
+      <td>18</td>
+      <td>62</td>
+      <td>15</td>
+      <td>18</td>
+      <td>17</td>
+      <td>14</td>
+      <td>12</td>
+      <td>84</td>
+      <td>83</td>
+      <td>87</td>
+      <td>81</td>
+      <td>86</td>
+      <td>11</td>
+      <td>22</td>
+      <td>79</td>
+      <td>38</td>
+      <td>10</td>
+      <td>10</td>
+      <td>25</td>
+      <td>11</td>
+      <td>82</td>
+      <td>30</td>
+      <td>22</td>
+      <td>10</td>
+      <td>50</td>
+      <td>35</td>
+      <td>13</td>
+      <td>79</td>
+      <td>57</td>
+      <td>14</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>192448</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>88</th>
+      <td>S. Ruffier</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/167628.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>85</td>
+      <td>85</td>
+      <td>AS Saint-Étienne</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1819.png</td>
+      <td>€24.5M</td>
+      <td>€49K</td>
+      <td>1257</td>
+      <td>45</td>
+      <td>31</td>
+      <td>51</td>
+      <td>55</td>
+      <td>15</td>
+      <td>57</td>
+      <td>11</td>
+      <td>17</td>
+      <td>12</td>
+      <td>11</td>
+      <td>12</td>
+      <td>82</td>
+      <td>84</td>
+      <td>77</td>
+      <td>85</td>
+      <td>87</td>
+      <td>12</td>
+      <td>25</td>
+      <td>72</td>
+      <td>34</td>
+      <td>11</td>
+      <td>11</td>
+      <td>25</td>
+      <td>12</td>
+      <td>78</td>
+      <td>33</td>
+      <td>21</td>
+      <td>11</td>
+      <td>50</td>
+      <td>37</td>
+      <td>12</td>
+      <td>76</td>
+      <td>49</td>
+      <td>13</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>167628</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>103</th>
+      <td>T. Horn</td>
+      <td>24</td>
+      <td>https://cdn.sofifa.org/48/18/players/200316.png</td>
+      <td>Germany</td>
+      <td>https://cdn.sofifa.org/flags/21.png</td>
+      <td>84</td>
+      <td>90</td>
+      <td>1. FC Köln</td>
+      <td>https://cdn.sofifa.org/24/18/teams/31.png</td>
+      <td>€31M</td>
+      <td>€39K</td>
+      <td>1260</td>
+      <td>45</td>
+      <td>41</td>
+      <td>50</td>
+      <td>31</td>
+      <td>22</td>
+      <td>20</td>
+      <td>19</td>
+      <td>12</td>
+      <td>20</td>
+      <td>13</td>
+      <td>15</td>
+      <td>83</td>
+      <td>81</td>
+      <td>83</td>
+      <td>82</td>
+      <td>86</td>
+      <td>14</td>
+      <td>22</td>
+      <td>64</td>
+      <td>32</td>
+      <td>17</td>
+      <td>11</td>
+      <td>21</td>
+      <td>15</td>
+      <td>81</td>
+      <td>35</td>
+      <td>22</td>
+      <td>12</td>
+      <td>51</td>
+      <td>31</td>
+      <td>13</td>
+      <td>67</td>
+      <td>55</td>
+      <td>14</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>200316</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>110</th>
+      <td>R. Bürki</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/189117.png</td>
+      <td>Switzerland</td>
+      <td>https://cdn.sofifa.org/flags/47.png</td>
+      <td>84</td>
+      <td>86</td>
+      <td>Borussia Dortmund</td>
+      <td>https://cdn.sofifa.org/24/18/teams/22.png</td>
+      <td>€26M</td>
+      <td>€69K</td>
+      <td>1257</td>
+      <td>44</td>
+      <td>35</td>
+      <td>51</td>
+      <td>52</td>
+      <td>23</td>
+      <td>58</td>
+      <td>15</td>
+      <td>13</td>
+      <td>16</td>
+      <td>8</td>
+      <td>12</td>
+      <td>84</td>
+      <td>82</td>
+      <td>73</td>
+      <td>80</td>
+      <td>85</td>
+      <td>17</td>
+      <td>18</td>
+      <td>74</td>
+      <td>24</td>
+      <td>14</td>
+      <td>14</td>
+      <td>20</td>
+      <td>10</td>
+      <td>80</td>
+      <td>37</td>
+      <td>22</td>
+      <td>16</td>
+      <td>52</td>
+      <td>36</td>
+      <td>13</td>
+      <td>74</td>
+      <td>50</td>
+      <td>13</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>189117</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>116</th>
+      <td>R. Fährmann</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/179783.png</td>
+      <td>Germany</td>
+      <td>https://cdn.sofifa.org/flags/21.png</td>
+      <td>84</td>
+      <td>85</td>
+      <td>FC Schalke 04</td>
+      <td>https://cdn.sofifa.org/24/18/teams/34.png</td>
+      <td>€25M</td>
+      <td>€54K</td>
+      <td>1190</td>
+      <td>38</td>
+      <td>36</td>
+      <td>39</td>
+      <td>36</td>
+      <td>24</td>
+      <td>61</td>
+      <td>14</td>
+      <td>18</td>
+      <td>15</td>
+      <td>11</td>
+      <td>11</td>
+      <td>83</td>
+      <td>86</td>
+      <td>52</td>
+      <td>85</td>
+      <td>87</td>
+      <td>15</td>
+      <td>23</td>
+      <td>72</td>
+      <td>26</td>
+      <td>9</td>
+      <td>12</td>
+      <td>21</td>
+      <td>11</td>
+      <td>84</td>
+      <td>25</td>
+      <td>24</td>
+      <td>10</td>
+      <td>47</td>
+      <td>32</td>
+      <td>12</td>
+      <td>79</td>
+      <td>42</td>
+      <td>11</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>179783</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>117</th>
+      <td>Sergio Asenjo</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/178750.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>84</td>
+      <td>85</td>
+      <td>Villarreal CF</td>
+      <td>https://cdn.sofifa.org/24/18/teams/483.png</td>
+      <td>€25M</td>
+      <td>€46K</td>
+      <td>1341</td>
+      <td>59</td>
+      <td>20</td>
+      <td>62</td>
+      <td>58</td>
+      <td>14</td>
+      <td>39</td>
+      <td>24</td>
+      <td>23</td>
+      <td>15</td>
+      <td>14</td>
+      <td>22</td>
+      <td>86</td>
+      <td>83</td>
+      <td>76</td>
+      <td>82</td>
+      <td>85</td>
+      <td>13</td>
+      <td>22</td>
+      <td>73</td>
+      <td>39</td>
+      <td>23</td>
+      <td>12</td>
+      <td>15</td>
+      <td>12</td>
+      <td>79</td>
+      <td>39</td>
+      <td>24</td>
+      <td>14</td>
+      <td>54</td>
+      <td>43</td>
+      <td>15</td>
+      <td>73</td>
+      <td>46</td>
+      <td>22</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>178750</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>131</th>
+      <td>G. Rulli</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/215316.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>83</td>
+      <td>89</td>
+      <td>Real Sociedad</td>
+      <td>https://cdn.sofifa.org/24/18/teams/457.png</td>
+      <td>€25.5M</td>
+      <td>€28K</td>
+      <td>1284</td>
+      <td>54</td>
+      <td>26</td>
+      <td>58</td>
+      <td>50</td>
+      <td>15</td>
+      <td>30</td>
+      <td>12</td>
+      <td>19</td>
+      <td>15</td>
+      <td>15</td>
+      <td>20</td>
+      <td>85</td>
+      <td>79</td>
+      <td>75</td>
+      <td>82</td>
+      <td>86</td>
+      <td>12</td>
+      <td>21</td>
+      <td>68</td>
+      <td>23</td>
+      <td>17</td>
+      <td>16</td>
+      <td>24</td>
+      <td>12</td>
+      <td>77</td>
+      <td>32</td>
+      <td>24</td>
+      <td>17</td>
+      <td>48</td>
+      <td>42</td>
+      <td>13</td>
+      <td>73</td>
+      <td>58</td>
+      <td>16</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>215316</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>135</th>
+      <td>Ederson</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/210257.png</td>
+      <td>Brazil</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>83</td>
+      <td>89</td>
+      <td>Manchester City</td>
+      <td>https://cdn.sofifa.org/24/18/teams/10.png</td>
+      <td>€26M</td>
+      <td>€87K</td>
+      <td>1320</td>
+      <td>64</td>
+      <td>35</td>
+      <td>60</td>
+      <td>40</td>
+      <td>30</td>
+      <td>58</td>
+      <td>20</td>
+      <td>12</td>
+      <td>21</td>
+      <td>14</td>
+      <td>20</td>
+      <td>81</td>
+      <td>76</td>
+      <td>82</td>
+      <td>78</td>
+      <td>87</td>
+      <td>14</td>
+      <td>25</td>
+      <td>58</td>
+      <td>30</td>
+      <td>18</td>
+      <td>9</td>
+      <td>17</td>
+      <td>16</td>
+      <td>86</td>
+      <td>15</td>
+      <td>42</td>
+      <td>8</td>
+      <td>63</td>
+      <td>38</td>
+      <td>15</td>
+      <td>68</td>
+      <td>60</td>
+      <td>18</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>210257</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>148</th>
+      <td>A. Lopes</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/199482.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>83</td>
+      <td>86</td>
+      <td>Olympique Lyonnais</td>
+      <td>https://cdn.sofifa.org/24/18/teams/66.png</td>
+      <td>€22.5M</td>
+      <td>€60K</td>
+      <td>1317</td>
+      <td>60</td>
+      <td>35</td>
+      <td>65</td>
+      <td>62</td>
+      <td>21</td>
+      <td>55</td>
+      <td>19</td>
+      <td>15</td>
+      <td>15</td>
+      <td>18</td>
+      <td>14</td>
+      <td>86</td>
+      <td>81</td>
+      <td>71</td>
+      <td>79</td>
+      <td>85</td>
+      <td>16</td>
+      <td>25</td>
+      <td>85</td>
+      <td>31</td>
+      <td>18</td>
+      <td>13</td>
+      <td>16</td>
+      <td>9</td>
+      <td>85</td>
+      <td>32</td>
+      <td>20</td>
+      <td>13</td>
+      <td>64</td>
+      <td>33</td>
+      <td>15</td>
+      <td>65</td>
+      <td>38</td>
+      <td>13</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>199482</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>150</th>
+      <td>M. Perin</td>
+      <td>24</td>
+      <td>https://cdn.sofifa.org/48/18/players/198009.png</td>
+      <td>Italy</td>
+      <td>https://cdn.sofifa.org/flags/27.png</td>
+      <td>83</td>
+      <td>88</td>
+      <td>Genoa</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110556.png</td>
+      <td>€25M</td>
+      <td>€28K</td>
+      <td>1246</td>
+      <td>57</td>
+      <td>25</td>
+      <td>70</td>
+      <td>30</td>
+      <td>23</td>
+      <td>58</td>
+      <td>11</td>
+      <td>15</td>
+      <td>19</td>
+      <td>11</td>
+      <td>13</td>
+      <td>80</td>
+      <td>85</td>
+      <td>71</td>
+      <td>78</td>
+      <td>90</td>
+      <td>12</td>
+      <td>19</td>
+      <td>75</td>
+      <td>31</td>
+      <td>17</td>
+      <td>14</td>
+      <td>21</td>
+      <td>12</td>
+      <td>79</td>
+      <td>33</td>
+      <td>23</td>
+      <td>19</td>
+      <td>56</td>
+      <td>30</td>
+      <td>12</td>
+      <td>52</td>
+      <td>44</td>
+      <td>19</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>198009</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>162</th>
+      <td>Oscar</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/188152.png</td>
+      <td>Brazil</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>83</td>
+      <td>86</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1961</td>
+      <td>75</td>
+      <td>31</td>
+      <td>86</td>
+      <td>80</td>
+      <td>84</td>
+      <td>83</td>
+      <td>70</td>
+      <td>77</td>
+      <td>81</td>
+      <td>75</td>
+      <td>77</td>
+      <td>12</td>
+      <td>10</td>
+      <td>15</td>
+      <td>12</td>
+      <td>12</td>
+      <td>54</td>
+      <td>34</td>
+      <td>66</td>
+      <td>78</td>
+      <td>77</td>
+      <td>37</td>
+      <td>68</td>
+      <td>81</td>
+      <td>81</td>
+      <td>83</td>
+      <td>76</td>
+      <td>47</td>
+      <td>74</td>
+      <td>76</td>
+      <td>50</td>
+      <td>36</td>
+      <td>83</td>
+      <td>63</td>
+      <td>81.0</td>
+      <td>49.0</td>
+      <td>61.0</td>
+      <td>80.0</td>
+      <td>77.0</td>
+      <td>188152</td>
+      <td>81.0</td>
+      <td>61.0</td>
+      <td>49.0</td>
+      <td>77.0</td>
+      <td>61.0</td>
+      <td>80.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>79.0</td>
+      <td>64.0</td>
+      <td>CAM</td>
+      <td>81.0</td>
+      <td>61.0</td>
+      <td>49.0</td>
+      <td>77.0</td>
+      <td>61.0</td>
+      <td>80.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>79.0</td>
+      <td>64.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>167</th>
+      <td>Adrien Silva</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/184826.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>83</td>
+      <td>83</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>2174</td>
+      <td>64</td>
+      <td>79</td>
+      <td>73</td>
+      <td>67</td>
+      <td>85</td>
+      <td>82</td>
+      <td>78</td>
+      <td>79</td>
+      <td>82</td>
+      <td>71</td>
+      <td>75</td>
+      <td>15</td>
+      <td>6</td>
+      <td>8</td>
+      <td>10</td>
+      <td>7</td>
+      <td>61</td>
+      <td>84</td>
+      <td>56</td>
+      <td>84</td>
+      <td>80</td>
+      <td>80</td>
+      <td>85</td>
+      <td>75</td>
+      <td>77</td>
+      <td>83</td>
+      <td>83</td>
+      <td>73</td>
+      <td>65</td>
+      <td>89</td>
+      <td>78</td>
+      <td>62</td>
+      <td>85</td>
+      <td>75</td>
+      <td>80.0</td>
+      <td>75.0</td>
+      <td>81.0</td>
+      <td>78.0</td>
+      <td>82.0</td>
+      <td>184826</td>
+      <td>80.0</td>
+      <td>78.0</td>
+      <td>75.0</td>
+      <td>82.0</td>
+      <td>81.0</td>
+      <td>78.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>79.0</td>
+      <td>CDM CM</td>
+      <td>80.0</td>
+      <td>78.0</td>
+      <td>75.0</td>
+      <td>82.0</td>
+      <td>81.0</td>
+      <td>78.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>174</th>
+      <td>Rui Patrício</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/178005.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>83</td>
+      <td>83</td>
+      <td>Sporting CP</td>
+      <td>https://cdn.sofifa.org/24/18/teams/237.png</td>
+      <td>€17.5M</td>
+      <td>€19K</td>
+      <td>1350</td>
+      <td>53</td>
+      <td>39</td>
+      <td>61</td>
+      <td>54</td>
+      <td>23</td>
+      <td>53</td>
+      <td>12</td>
+      <td>10</td>
+      <td>20</td>
+      <td>12</td>
+      <td>16</td>
+      <td>85</td>
+      <td>81</td>
+      <td>80</td>
+      <td>79</td>
+      <td>82</td>
+      <td>11</td>
+      <td>22</td>
+      <td>79</td>
+      <td>30</td>
+      <td>11</td>
+      <td>13</td>
+      <td>32</td>
+      <td>13</td>
+      <td>80</td>
+      <td>31</td>
+      <td>38</td>
+      <td>11</td>
+      <td>57</td>
+      <td>45</td>
+      <td>13</td>
+      <td>77</td>
+      <td>63</td>
+      <td>17</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>178005</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>175</th>
+      <td>Y. Sommer</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/177683.png</td>
+      <td>Switzerland</td>
+      <td>https://cdn.sofifa.org/flags/47.png</td>
+      <td>83</td>
+      <td>84</td>
+      <td>Borussia Mönchengladbach</td>
+      <td>https://cdn.sofifa.org/24/18/teams/23.png</td>
+      <td>€21M</td>
+      <td>€39K</td>
+      <td>1299</td>
+      <td>48</td>
+      <td>38</td>
+      <td>55</td>
+      <td>58</td>
+      <td>25</td>
+      <td>57</td>
+      <td>13</td>
+      <td>12</td>
+      <td>15</td>
+      <td>13</td>
+      <td>13</td>
+      <td>81</td>
+      <td>82</td>
+      <td>83</td>
+      <td>80</td>
+      <td>83</td>
+      <td>10</td>
+      <td>21</td>
+      <td>69</td>
+      <td>31</td>
+      <td>12</td>
+      <td>11</td>
+      <td>24</td>
+      <td>15</td>
+      <td>80</td>
+      <td>40</td>
+      <td>23</td>
+      <td>12</td>
+      <td>54</td>
+      <td>45</td>
+      <td>19</td>
+      <td>68</td>
+      <td>58</td>
+      <td>8</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>177683</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>182</th>
+      <td>K. Schmeichel</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/163587.png</td>
+      <td>Denmark</td>
+      <td>https://cdn.sofifa.org/flags/13.png</td>
+      <td>83</td>
+      <td>84</td>
+      <td>Leicester City</td>
+      <td>https://cdn.sofifa.org/24/18/teams/95.png</td>
+      <td>€19M</td>
+      <td>€65K</td>
+      <td>1355</td>
+      <td>62</td>
+      <td>33</td>
+      <td>62</td>
+      <td>47</td>
+      <td>40</td>
+      <td>52</td>
+      <td>18</td>
+      <td>13</td>
+      <td>12</td>
+      <td>12</td>
+      <td>15</td>
+      <td>83</td>
+      <td>82</td>
+      <td>82</td>
+      <td>80</td>
+      <td>86</td>
+      <td>16</td>
+      <td>20</td>
+      <td>60</td>
+      <td>46</td>
+      <td>14</td>
+      <td>14</td>
+      <td>26</td>
+      <td>14</td>
+      <td>80</td>
+      <td>44</td>
+      <td>36</td>
+      <td>13</td>
+      <td>60</td>
+      <td>35</td>
+      <td>14</td>
+      <td>62</td>
+      <td>59</td>
+      <td>15</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>163587</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>188</th>
+      <td>Diego López</td>
+      <td>35</td>
+      <td>https://cdn.sofifa.org/48/18/players/146748.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>83</td>
+      <td>83</td>
+      <td>RCD Espanyol</td>
+      <td>https://cdn.sofifa.org/24/18/teams/452.png</td>
+      <td>€6M</td>
+      <td>€19K</td>
+      <td>1200</td>
+      <td>34</td>
+      <td>36</td>
+      <td>48</td>
+      <td>47</td>
+      <td>23</td>
+      <td>62</td>
+      <td>11</td>
+      <td>10</td>
+      <td>11</td>
+      <td>12</td>
+      <td>11</td>
+      <td>77</td>
+      <td>84</td>
+      <td>76</td>
+      <td>83</td>
+      <td>80</td>
+      <td>10</td>
+      <td>16</td>
+      <td>68</td>
+      <td>23</td>
+      <td>11</td>
+      <td>14</td>
+      <td>21</td>
+      <td>11</td>
+      <td>79</td>
+      <td>28</td>
+      <td>22</td>
+      <td>14</td>
+      <td>52</td>
+      <td>42</td>
+      <td>13</td>
+      <td>66</td>
+      <td>53</td>
+      <td>14</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>146748</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>194</th>
+      <td>José Reina</td>
+      <td>34</td>
+      <td>https://cdn.sofifa.org/48/18/players/24630.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>83</td>
+      <td>83</td>
+      <td>Napoli</td>
+      <td>https://cdn.sofifa.org/24/18/teams/48.png</td>
+      <td>€10.5M</td>
+      <td>€59K</td>
+      <td>1291</td>
+      <td>50</td>
+      <td>32</td>
+      <td>50</td>
+      <td>60</td>
+      <td>23</td>
+      <td>60</td>
+      <td>11</td>
+      <td>11</td>
+      <td>10</td>
+      <td>14</td>
+      <td>11</td>
+      <td>80</td>
+      <td>83</td>
+      <td>82</td>
+      <td>82</td>
+      <td>82</td>
+      <td>13</td>
+      <td>22</td>
+      <td>73</td>
+      <td>22</td>
+      <td>15</td>
+      <td>12</td>
+      <td>24</td>
+      <td>13</td>
+      <td>82</td>
+      <td>19</td>
+      <td>24</td>
+      <td>24</td>
+      <td>63</td>
+      <td>34</td>
+      <td>22</td>
+      <td>72</td>
+      <td>65</td>
+      <td>11</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>24630</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>197</th>
+      <td>Casillas</td>
+      <td>36</td>
+      <td>https://cdn.sofifa.org/48/18/players/5479.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>83</td>
+      <td>83</td>
+      <td>FC Porto</td>
+      <td>https://cdn.sofifa.org/24/18/teams/236.png</td>
+      <td>€3.5M</td>
+      <td>€10K</td>
+      <td>1293</td>
+      <td>59</td>
+      <td>23</td>
+      <td>62</td>
+      <td>46</td>
+      <td>23</td>
+      <td>70</td>
+      <td>13</td>
+      <td>25</td>
+      <td>25</td>
+      <td>12</td>
+      <td>13</td>
+      <td>86</td>
+      <td>74</td>
+      <td>58</td>
+      <td>80</td>
+      <td>85</td>
+      <td>25</td>
+      <td>22</td>
+      <td>77</td>
+      <td>22</td>
+      <td>13</td>
+      <td>11</td>
+      <td>24</td>
+      <td>16</td>
+      <td>77</td>
+      <td>21</td>
+      <td>28</td>
+      <td>13</td>
+      <td>57</td>
+      <td>43</td>
+      <td>11</td>
+      <td>70</td>
+      <td>65</td>
+      <td>14</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>5479</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>198</th>
+      <td>G. Donnarumma</td>
+      <td>18</td>
+      <td>https://cdn.sofifa.org/48/18/players/230621.png</td>
+      <td>Italy</td>
+      <td>https://cdn.sofifa.org/flags/27.png</td>
+      <td>82</td>
+      <td>94</td>
+      <td>Milan</td>
+      <td>https://cdn.sofifa.org/24/18/teams/47.png</td>
+      <td>€28.5M</td>
+      <td>€35K</td>
+      <td>1266</td>
+      <td>46</td>
+      <td>30</td>
+      <td>64</td>
+      <td>38</td>
+      <td>28</td>
+      <td>68</td>
+      <td>12</td>
+      <td>12</td>
+      <td>24</td>
+      <td>12</td>
+      <td>14</td>
+      <td>88</td>
+      <td>78</td>
+      <td>72</td>
+      <td>78</td>
+      <td>88</td>
+      <td>12</td>
+      <td>26</td>
+      <td>72</td>
+      <td>24</td>
+      <td>18</td>
+      <td>12</td>
+      <td>24</td>
+      <td>14</td>
+      <td>74</td>
+      <td>34</td>
+      <td>24</td>
+      <td>16</td>
+      <td>54</td>
+      <td>34</td>
+      <td>14</td>
+      <td>72</td>
+      <td>50</td>
+      <td>8</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>230621</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>17836</th>
+      <td>J. García</td>
+      <td>19</td>
+      <td>https://cdn.sofifa.org/48/18/players/240286.png</td>
+      <td>Mexico</td>
+      <td>https://cdn.sofifa.org/flags/83.png</td>
+      <td>50</td>
+      <td>66</td>
+      <td>Santos Laguna</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110144.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>823</td>
+      <td>26</td>
+      <td>19</td>
+      <td>35</td>
+      <td>43</td>
+      <td>16</td>
+      <td>31</td>
+      <td>14</td>
+      <td>13</td>
+      <td>13</td>
+      <td>7</td>
+      <td>12</td>
+      <td>47</td>
+      <td>56</td>
+      <td>54</td>
+      <td>44</td>
+      <td>52</td>
+      <td>12</td>
+      <td>9</td>
+      <td>64</td>
+      <td>16</td>
+      <td>9</td>
+      <td>9</td>
+      <td>14</td>
+      <td>8</td>
+      <td>45</td>
+      <td>28</td>
+      <td>19</td>
+      <td>11</td>
+      <td>18</td>
+      <td>24</td>
+      <td>12</td>
+      <td>42</td>
+      <td>26</td>
+      <td>6</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>240286</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17856</th>
+      <td>N. Mantl</td>
+      <td>17</td>
+      <td>https://cdn.sofifa.org/48/18/players/239816.png</td>
+      <td>Germany</td>
+      <td>https://cdn.sofifa.org/flags/21.png</td>
+      <td>50</td>
+      <td>72</td>
+      <td>SpVgg Unterhaching</td>
+      <td>https://cdn.sofifa.org/24/18/teams/172.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>807</td>
+      <td>33</td>
+      <td>19</td>
+      <td>23</td>
+      <td>46</td>
+      <td>10</td>
+      <td>36</td>
+      <td>13</td>
+      <td>13</td>
+      <td>14</td>
+      <td>7</td>
+      <td>10</td>
+      <td>53</td>
+      <td>50</td>
+      <td>46</td>
+      <td>45</td>
+      <td>58</td>
+      <td>14</td>
+      <td>9</td>
+      <td>58</td>
+      <td>19</td>
+      <td>5</td>
+      <td>8</td>
+      <td>16</td>
+      <td>5</td>
+      <td>35</td>
+      <td>17</td>
+      <td>21</td>
+      <td>12</td>
+      <td>25</td>
+      <td>28</td>
+      <td>12</td>
+      <td>45</td>
+      <td>33</td>
+      <td>5</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>239816</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17862</th>
+      <td>J. Granlund</td>
+      <td>17</td>
+      <td>https://cdn.sofifa.org/48/18/players/240339.png</td>
+      <td>Norway</td>
+      <td>https://cdn.sofifa.org/flags/36.png</td>
+      <td>50</td>
+      <td>65</td>
+      <td>Sandefjord Fotball</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1757.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>795</td>
+      <td>15</td>
+      <td>16</td>
+      <td>34</td>
+      <td>42</td>
+      <td>10</td>
+      <td>31</td>
+      <td>11</td>
+      <td>10</td>
+      <td>11</td>
+      <td>9</td>
+      <td>13</td>
+      <td>49</td>
+      <td>53</td>
+      <td>49</td>
+      <td>43</td>
+      <td>53</td>
+      <td>12</td>
+      <td>13</td>
+      <td>56</td>
+      <td>19</td>
+      <td>8</td>
+      <td>8</td>
+      <td>16</td>
+      <td>6</td>
+      <td>47</td>
+      <td>15</td>
+      <td>22</td>
+      <td>10</td>
+      <td>30</td>
+      <td>24</td>
+      <td>12</td>
+      <td>44</td>
+      <td>26</td>
+      <td>9</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>240339</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17868</th>
+      <td>D. Jamieson</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/236514.png</td>
+      <td>Scotland</td>
+      <td>https://cdn.sofifa.org/flags/42.png</td>
+      <td>50</td>
+      <td>54</td>
+      <td>Hamilton Academical FC</td>
+      <td>https://cdn.sofifa.org/24/18/teams/184.png</td>
+      <td>€30K</td>
+      <td>€1K</td>
+      <td>876</td>
+      <td>20</td>
+      <td>25</td>
+      <td>33</td>
+      <td>41</td>
+      <td>20</td>
+      <td>40</td>
+      <td>20</td>
+      <td>10</td>
+      <td>11</td>
+      <td>9</td>
+      <td>24</td>
+      <td>56</td>
+      <td>54</td>
+      <td>55</td>
+      <td>46</td>
+      <td>44</td>
+      <td>22</td>
+      <td>12</td>
+      <td>58</td>
+      <td>22</td>
+      <td>12</td>
+      <td>12</td>
+      <td>21</td>
+      <td>10</td>
+      <td>40</td>
+      <td>21</td>
+      <td>22</td>
+      <td>13</td>
+      <td>22</td>
+      <td>31</td>
+      <td>11</td>
+      <td>33</td>
+      <td>36</td>
+      <td>10</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>236514</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17871</th>
+      <td>B. Kelly</td>
+      <td>19</td>
+      <td>https://cdn.sofifa.org/48/18/players/228581.png</td>
+      <td>Republic of Ireland</td>
+      <td>https://cdn.sofifa.org/flags/25.png</td>
+      <td>50</td>
+      <td>59</td>
+      <td>Dundalk</td>
+      <td>https://cdn.sofifa.org/24/18/teams/837.png</td>
+      <td>€30K</td>
+      <td>€1K</td>
+      <td>993</td>
+      <td>42</td>
+      <td>35</td>
+      <td>36</td>
+      <td>56</td>
+      <td>16</td>
+      <td>21</td>
+      <td>18</td>
+      <td>18</td>
+      <td>17</td>
+      <td>15</td>
+      <td>17</td>
+      <td>48</td>
+      <td>51</td>
+      <td>50</td>
+      <td>52</td>
+      <td>46</td>
+      <td>16</td>
+      <td>21</td>
+      <td>58</td>
+      <td>28</td>
+      <td>12</td>
+      <td>12</td>
+      <td>13</td>
+      <td>19</td>
+      <td>46</td>
+      <td>34</td>
+      <td>20</td>
+      <td>19</td>
+      <td>47</td>
+      <td>23</td>
+      <td>11</td>
+      <td>54</td>
+      <td>28</td>
+      <td>15</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>228581</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17872</th>
+      <td>M. Bobjerg</td>
+      <td>19</td>
+      <td>https://cdn.sofifa.org/48/18/players/234471.png</td>
+      <td>Denmark</td>
+      <td>https://cdn.sofifa.org/flags/13.png</td>
+      <td>50</td>
+      <td>65</td>
+      <td>AC Horsens</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1446.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>856</td>
+      <td>26</td>
+      <td>20</td>
+      <td>37</td>
+      <td>58</td>
+      <td>15</td>
+      <td>37</td>
+      <td>11</td>
+      <td>12</td>
+      <td>14</td>
+      <td>8</td>
+      <td>10</td>
+      <td>46</td>
+      <td>59</td>
+      <td>50</td>
+      <td>44</td>
+      <td>50</td>
+      <td>13</td>
+      <td>11</td>
+      <td>57</td>
+      <td>24</td>
+      <td>9</td>
+      <td>8</td>
+      <td>18</td>
+      <td>8</td>
+      <td>42</td>
+      <td>25</td>
+      <td>21</td>
+      <td>11</td>
+      <td>30</td>
+      <td>20</td>
+      <td>12</td>
+      <td>59</td>
+      <td>21</td>
+      <td>7</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>234471</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17880</th>
+      <td>R. Pasquel</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/237045.png</td>
+      <td>Mexico</td>
+      <td>https://cdn.sofifa.org/flags/83.png</td>
+      <td>50</td>
+      <td>60</td>
+      <td>Deportivo Toluca</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1882.png</td>
+      <td>€40K</td>
+      <td>€1K</td>
+      <td>800</td>
+      <td>21</td>
+      <td>26</td>
+      <td>33</td>
+      <td>47</td>
+      <td>10</td>
+      <td>36</td>
+      <td>11</td>
+      <td>13</td>
+      <td>9</td>
+      <td>8</td>
+      <td>12</td>
+      <td>54</td>
+      <td>53</td>
+      <td>47</td>
+      <td>40</td>
+      <td>56</td>
+      <td>11</td>
+      <td>12</td>
+      <td>59</td>
+      <td>24</td>
+      <td>5</td>
+      <td>6</td>
+      <td>14</td>
+      <td>6</td>
+      <td>32</td>
+      <td>18</td>
+      <td>18</td>
+      <td>10</td>
+      <td>21</td>
+      <td>21</td>
+      <td>10</td>
+      <td>46</td>
+      <td>38</td>
+      <td>9</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>237045</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17892</th>
+      <td>L. Tigges</td>
+      <td>18</td>
+      <td>https://cdn.sofifa.org/48/18/players/238652.png</td>
+      <td>Germany</td>
+      <td>https://cdn.sofifa.org/flags/21.png</td>
+      <td>49</td>
+      <td>64</td>
+      <td>VfL Osnabrück</td>
+      <td>https://cdn.sofifa.org/24/18/teams/487.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>736</td>
+      <td>18</td>
+      <td>20</td>
+      <td>24</td>
+      <td>20</td>
+      <td>13</td>
+      <td>29</td>
+      <td>13</td>
+      <td>10</td>
+      <td>11</td>
+      <td>7</td>
+      <td>10</td>
+      <td>49</td>
+      <td>51</td>
+      <td>48</td>
+      <td>47</td>
+      <td>50</td>
+      <td>13</td>
+      <td>9</td>
+      <td>36</td>
+      <td>21</td>
+      <td>6</td>
+      <td>7</td>
+      <td>11</td>
+      <td>6</td>
+      <td>39</td>
+      <td>15</td>
+      <td>19</td>
+      <td>13</td>
+      <td>26</td>
+      <td>25</td>
+      <td>11</td>
+      <td>51</td>
+      <td>30</td>
+      <td>7</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>238652</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17894</th>
+      <td>S. Więckowicz</td>
+      <td>17</td>
+      <td>https://cdn.sofifa.org/48/18/players/240197.png</td>
+      <td>Poland</td>
+      <td>https://cdn.sofifa.org/flags/37.png</td>
+      <td>49</td>
+      <td>70</td>
+      <td>Arka Gdynia</td>
+      <td>https://cdn.sofifa.org/24/18/teams/111082.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>794</td>
+      <td>21</td>
+      <td>21</td>
+      <td>31</td>
+      <td>21</td>
+      <td>16</td>
+      <td>31</td>
+      <td>12</td>
+      <td>12</td>
+      <td>11</td>
+      <td>8</td>
+      <td>16</td>
+      <td>51</td>
+      <td>61</td>
+      <td>51</td>
+      <td>43</td>
+      <td>48</td>
+      <td>11</td>
+      <td>11</td>
+      <td>35</td>
+      <td>20</td>
+      <td>10</td>
+      <td>9</td>
+      <td>18</td>
+      <td>9</td>
+      <td>28</td>
+      <td>24</td>
+      <td>21</td>
+      <td>13</td>
+      <td>27</td>
+      <td>21</td>
+      <td>17</td>
+      <td>55</td>
+      <td>33</td>
+      <td>9</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>240197</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17895</th>
+      <td>M. Bacon</td>
+      <td>19</td>
+      <td>https://cdn.sofifa.org/48/18/players/231751.png</td>
+      <td>England</td>
+      <td>https://cdn.sofifa.org/flags/14.png</td>
+      <td>49</td>
+      <td>57</td>
+      <td>Carlisle United</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1480.png</td>
+      <td>€30K</td>
+      <td>€1K</td>
+      <td>789</td>
+      <td>29</td>
+      <td>23</td>
+      <td>30</td>
+      <td>41</td>
+      <td>10</td>
+      <td>39</td>
+      <td>14</td>
+      <td>12</td>
+      <td>6</td>
+      <td>5</td>
+      <td>12</td>
+      <td>47</td>
+      <td>56</td>
+      <td>54</td>
+      <td>42</td>
+      <td>46</td>
+      <td>8</td>
+      <td>10</td>
+      <td>45</td>
+      <td>29</td>
+      <td>6</td>
+      <td>6</td>
+      <td>11</td>
+      <td>5</td>
+      <td>44</td>
+      <td>23</td>
+      <td>12</td>
+      <td>10</td>
+      <td>28</td>
+      <td>23</td>
+      <td>12</td>
+      <td>60</td>
+      <td>22</td>
+      <td>8</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>231751</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17896</th>
+      <td>C. Veloz</td>
+      <td>19</td>
+      <td>https://cdn.sofifa.org/48/18/players/240975.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>49</td>
+      <td>59</td>
+      <td>Gimnasia y Esgrima La Plata</td>
+      <td>https://cdn.sofifa.org/24/18/teams/101084.png</td>
+      <td>€40K</td>
+      <td>€1K</td>
+      <td>1059</td>
+      <td>27</td>
+      <td>32</td>
+      <td>46</td>
+      <td>35</td>
+      <td>31</td>
+      <td>34</td>
+      <td>12</td>
+      <td>12</td>
+      <td>16</td>
+      <td>11</td>
+      <td>14</td>
+      <td>49</td>
+      <td>46</td>
+      <td>47</td>
+      <td>49</td>
+      <td>51</td>
+      <td>32</td>
+      <td>12</td>
+      <td>69</td>
+      <td>45</td>
+      <td>24</td>
+      <td>14</td>
+      <td>21</td>
+      <td>12</td>
+      <td>42</td>
+      <td>47</td>
+      <td>47</td>
+      <td>10</td>
+      <td>39</td>
+      <td>35</td>
+      <td>13</td>
+      <td>58</td>
+      <td>47</td>
+      <td>14</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>240975</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17901</th>
+      <td>N. Maher</td>
+      <td>18</td>
+      <td>https://cdn.sofifa.org/48/18/players/234604.png</td>
+      <td>England</td>
+      <td>https://cdn.sofifa.org/flags/14.png</td>
+      <td>49</td>
+      <td>57</td>
+      <td>Morecambe</td>
+      <td>https://cdn.sofifa.org/24/18/teams/357.png</td>
+      <td>€30K</td>
+      <td>€1K</td>
+      <td>851</td>
+      <td>32</td>
+      <td>24</td>
+      <td>28</td>
+      <td>39</td>
+      <td>33</td>
+      <td>31</td>
+      <td>11</td>
+      <td>10</td>
+      <td>11</td>
+      <td>9</td>
+      <td>13</td>
+      <td>53</td>
+      <td>50</td>
+      <td>49</td>
+      <td>47</td>
+      <td>51</td>
+      <td>30</td>
+      <td>8</td>
+      <td>44</td>
+      <td>27</td>
+      <td>6</td>
+      <td>5</td>
+      <td>12</td>
+      <td>8</td>
+      <td>33</td>
+      <td>34</td>
+      <td>23</td>
+      <td>11</td>
+      <td>27</td>
+      <td>28</td>
+      <td>14</td>
+      <td>44</td>
+      <td>29</td>
+      <td>8</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>234604</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17904</th>
+      <td>T. Trueba</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/239736.png</td>
+      <td>Mexico</td>
+      <td>https://cdn.sofifa.org/flags/83.png</td>
+      <td>49</td>
+      <td>57</td>
+      <td>Puebla</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110152.png</td>
+      <td>€30K</td>
+      <td>€1K</td>
+      <td>826</td>
+      <td>30</td>
+      <td>23</td>
+      <td>28</td>
+      <td>41</td>
+      <td>17</td>
+      <td>29</td>
+      <td>14</td>
+      <td>14</td>
+      <td>11</td>
+      <td>5</td>
+      <td>13</td>
+      <td>49</td>
+      <td>51</td>
+      <td>51</td>
+      <td>42</td>
+      <td>51</td>
+      <td>14</td>
+      <td>12</td>
+      <td>62</td>
+      <td>17</td>
+      <td>8</td>
+      <td>5</td>
+      <td>19</td>
+      <td>6</td>
+      <td>42</td>
+      <td>26</td>
+      <td>25</td>
+      <td>14</td>
+      <td>19</td>
+      <td>28</td>
+      <td>12</td>
+      <td>45</td>
+      <td>27</td>
+      <td>5</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>239736</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17906</th>
+      <td>N. Bishop</td>
+      <td>17</td>
+      <td>https://cdn.sofifa.org/48/18/players/237188.png</td>
+      <td>England</td>
+      <td>https://cdn.sofifa.org/flags/14.png</td>
+      <td>49</td>
+      <td>71</td>
+      <td>Southend United</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1954.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>831</td>
+      <td>17</td>
+      <td>26</td>
+      <td>33</td>
+      <td>49</td>
+      <td>18</td>
+      <td>25</td>
+      <td>13</td>
+      <td>10</td>
+      <td>12</td>
+      <td>6</td>
+      <td>13</td>
+      <td>46</td>
+      <td>45</td>
+      <td>59</td>
+      <td>48</td>
+      <td>58</td>
+      <td>13</td>
+      <td>12</td>
+      <td>61</td>
+      <td>26</td>
+      <td>9</td>
+      <td>7</td>
+      <td>16</td>
+      <td>6</td>
+      <td>37</td>
+      <td>25</td>
+      <td>16</td>
+      <td>12</td>
+      <td>25</td>
+      <td>25</td>
+      <td>13</td>
+      <td>42</td>
+      <td>24</td>
+      <td>9</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>237188</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17908</th>
+      <td>M. Al Baqawi</td>
+      <td>19</td>
+      <td>https://cdn.sofifa.org/48/18/players/240531.png</td>
+      <td>Saudi Arabia</td>
+      <td>https://cdn.sofifa.org/flags/183.png</td>
+      <td>49</td>
+      <td>64</td>
+      <td>Al Taawoun</td>
+      <td>https://cdn.sofifa.org/24/18/teams/112393.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>848</td>
+      <td>31</td>
+      <td>27</td>
+      <td>37</td>
+      <td>42</td>
+      <td>19</td>
+      <td>21</td>
+      <td>12</td>
+      <td>12</td>
+      <td>9</td>
+      <td>6</td>
+      <td>13</td>
+      <td>52</td>
+      <td>49</td>
+      <td>49</td>
+      <td>40</td>
+      <td>54</td>
+      <td>14</td>
+      <td>9</td>
+      <td>64</td>
+      <td>24</td>
+      <td>6</td>
+      <td>7</td>
+      <td>11</td>
+      <td>5</td>
+      <td>42</td>
+      <td>28</td>
+      <td>16</td>
+      <td>12</td>
+      <td>26</td>
+      <td>23</td>
+      <td>14</td>
+      <td>53</td>
+      <td>34</td>
+      <td>8</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>240531</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17909</th>
+      <td>A. Giacomel</td>
+      <td>18</td>
+      <td>https://cdn.sofifa.org/48/18/players/240790.png</td>
+      <td>Italy</td>
+      <td>https://cdn.sofifa.org/flags/27.png</td>
+      <td>49</td>
+      <td>64</td>
+      <td>Empoli</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1746.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>755</td>
+      <td>22</td>
+      <td>18</td>
+      <td>38</td>
+      <td>25</td>
+      <td>19</td>
+      <td>36</td>
+      <td>13</td>
+      <td>12</td>
+      <td>12</td>
+      <td>5</td>
+      <td>13</td>
+      <td>45</td>
+      <td>55</td>
+      <td>48</td>
+      <td>45</td>
+      <td>56</td>
+      <td>13</td>
+      <td>11</td>
+      <td>32</td>
+      <td>20</td>
+      <td>7</td>
+      <td>7</td>
+      <td>11</td>
+      <td>7</td>
+      <td>33</td>
+      <td>16</td>
+      <td>20</td>
+      <td>10</td>
+      <td>19</td>
+      <td>22</td>
+      <td>12</td>
+      <td>59</td>
+      <td>25</td>
+      <td>5</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>240790</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17912</th>
+      <td>K. Tomasik</td>
+      <td>17</td>
+      <td>https://cdn.sofifa.org/48/18/players/239260.png</td>
+      <td>Poland</td>
+      <td>https://cdn.sofifa.org/flags/37.png</td>
+      <td>49</td>
+      <td>64</td>
+      <td>Sandecja Nowy Sącz</td>
+      <td>https://cdn.sofifa.org/24/18/teams/112508.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>755</td>
+      <td>21</td>
+      <td>22</td>
+      <td>37</td>
+      <td>23</td>
+      <td>12</td>
+      <td>32</td>
+      <td>10</td>
+      <td>12</td>
+      <td>12</td>
+      <td>9</td>
+      <td>10</td>
+      <td>50</td>
+      <td>47</td>
+      <td>55</td>
+      <td>43</td>
+      <td>54</td>
+      <td>11</td>
+      <td>12</td>
+      <td>38</td>
+      <td>16</td>
+      <td>9</td>
+      <td>7</td>
+      <td>15</td>
+      <td>5</td>
+      <td>38</td>
+      <td>18</td>
+      <td>16</td>
+      <td>11</td>
+      <td>16</td>
+      <td>23</td>
+      <td>12</td>
+      <td>54</td>
+      <td>30</td>
+      <td>7</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>239260</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17913</th>
+      <td>V. Paillon</td>
+      <td>19</td>
+      <td>https://cdn.sofifa.org/48/18/players/233118.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>49</td>
+      <td>67</td>
+      <td>ES Troyes AC</td>
+      <td>https://cdn.sofifa.org/24/18/teams/294.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>804</td>
+      <td>31</td>
+      <td>20</td>
+      <td>28</td>
+      <td>44</td>
+      <td>16</td>
+      <td>27</td>
+      <td>13</td>
+      <td>12</td>
+      <td>13</td>
+      <td>8</td>
+      <td>11</td>
+      <td>50</td>
+      <td>49</td>
+      <td>56</td>
+      <td>48</td>
+      <td>47</td>
+      <td>13</td>
+      <td>9</td>
+      <td>59</td>
+      <td>15</td>
+      <td>5</td>
+      <td>5</td>
+      <td>13</td>
+      <td>4</td>
+      <td>44</td>
+      <td>25</td>
+      <td>19</td>
+      <td>12</td>
+      <td>27</td>
+      <td>20</td>
+      <td>11</td>
+      <td>50</td>
+      <td>21</td>
+      <td>6</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>233118</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17914</th>
+      <td>T. McCarron</td>
+      <td>19</td>
+      <td>https://cdn.sofifa.org/48/18/players/231583.png</td>
+      <td>Republic of Ireland</td>
+      <td>https://cdn.sofifa.org/flags/25.png</td>
+      <td>49</td>
+      <td>57</td>
+      <td>Finn Harps</td>
+      <td>https://cdn.sofifa.org/24/18/teams/111131.png</td>
+      <td>€30K</td>
+      <td>€1K</td>
+      <td>846</td>
+      <td>25</td>
+      <td>17</td>
+      <td>27</td>
+      <td>50</td>
+      <td>10</td>
+      <td>21</td>
+      <td>12</td>
+      <td>14</td>
+      <td>12</td>
+      <td>12</td>
+      <td>13</td>
+      <td>49</td>
+      <td>50</td>
+      <td>48</td>
+      <td>49</td>
+      <td>53</td>
+      <td>11</td>
+      <td>20</td>
+      <td>54</td>
+      <td>21</td>
+      <td>11</td>
+      <td>12</td>
+      <td>15</td>
+      <td>13</td>
+      <td>35</td>
+      <td>20</td>
+      <td>17</td>
+      <td>12</td>
+      <td>16</td>
+      <td>44</td>
+      <td>10</td>
+      <td>47</td>
+      <td>34</td>
+      <td>13</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>231583</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17919</th>
+      <td>W. Henry</td>
+      <td>18</td>
+      <td>https://cdn.sofifa.org/48/18/players/233398.png</td>
+      <td>England</td>
+      <td>https://cdn.sofifa.org/flags/14.png</td>
+      <td>49</td>
+      <td>67</td>
+      <td>Swindon Town</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1934.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>771</td>
+      <td>16</td>
+      <td>25</td>
+      <td>31</td>
+      <td>34</td>
+      <td>15</td>
+      <td>19</td>
+      <td>13</td>
+      <td>10</td>
+      <td>14</td>
+      <td>5</td>
+      <td>12</td>
+      <td>56</td>
+      <td>46</td>
+      <td>45</td>
+      <td>38</td>
+      <td>54</td>
+      <td>13</td>
+      <td>12</td>
+      <td>47</td>
+      <td>21</td>
+      <td>8</td>
+      <td>9</td>
+      <td>17</td>
+      <td>6</td>
+      <td>43</td>
+      <td>27</td>
+      <td>15</td>
+      <td>14</td>
+      <td>27</td>
+      <td>16</td>
+      <td>13</td>
+      <td>44</td>
+      <td>16</td>
+      <td>9</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>233398</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17927</th>
+      <td>D. Mackay</td>
+      <td>20</td>
+      <td>https://cdn.sofifa.org/48/18/players/225510.png</td>
+      <td>Scotland</td>
+      <td>https://cdn.sofifa.org/flags/42.png</td>
+      <td>49</td>
+      <td>59</td>
+      <td>Kilmarnock</td>
+      <td>https://cdn.sofifa.org/24/18/teams/82.png</td>
+      <td>€40K</td>
+      <td>€1K</td>
+      <td>976</td>
+      <td>42</td>
+      <td>18</td>
+      <td>37</td>
+      <td>52</td>
+      <td>23</td>
+      <td>30</td>
+      <td>14</td>
+      <td>20</td>
+      <td>13</td>
+      <td>20</td>
+      <td>22</td>
+      <td>48</td>
+      <td>50</td>
+      <td>47</td>
+      <td>48</td>
+      <td>48</td>
+      <td>20</td>
+      <td>23</td>
+      <td>48</td>
+      <td>22</td>
+      <td>21</td>
+      <td>15</td>
+      <td>24</td>
+      <td>14</td>
+      <td>45</td>
+      <td>28</td>
+      <td>17</td>
+      <td>18</td>
+      <td>41</td>
+      <td>33</td>
+      <td>18</td>
+      <td>50</td>
+      <td>19</td>
+      <td>18</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>225510</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17934</th>
+      <td>K. Horgan</td>
+      <td>20</td>
+      <td>https://cdn.sofifa.org/48/18/players/229130.png</td>
+      <td>Republic of Ireland</td>
+      <td>https://cdn.sofifa.org/flags/25.png</td>
+      <td>48</td>
+      <td>58</td>
+      <td>Shamrock Rovers</td>
+      <td>https://cdn.sofifa.org/24/18/teams/306.png</td>
+      <td>€40K</td>
+      <td>€1K</td>
+      <td>936</td>
+      <td>44</td>
+      <td>24</td>
+      <td>31</td>
+      <td>40</td>
+      <td>22</td>
+      <td>24</td>
+      <td>18</td>
+      <td>12</td>
+      <td>13</td>
+      <td>13</td>
+      <td>18</td>
+      <td>45</td>
+      <td>48</td>
+      <td>46</td>
+      <td>47</td>
+      <td>48</td>
+      <td>15</td>
+      <td>21</td>
+      <td>66</td>
+      <td>20</td>
+      <td>12</td>
+      <td>13</td>
+      <td>17</td>
+      <td>16</td>
+      <td>49</td>
+      <td>24</td>
+      <td>20</td>
+      <td>11</td>
+      <td>41</td>
+      <td>40</td>
+      <td>18</td>
+      <td>49</td>
+      <td>22</td>
+      <td>13</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>229130</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17937</th>
+      <td>V. Soromytko</td>
+      <td>22</td>
+      <td>https://cdn.sofifa.org/48/18/players/239933.png</td>
+      <td>Russia</td>
+      <td>https://cdn.sofifa.org/flags/40.png</td>
+      <td>48</td>
+      <td>57</td>
+      <td>FC SKA-Energiya Khabarovsk</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110101.png</td>
+      <td>€30K</td>
+      <td>€2K</td>
+      <td>848</td>
+      <td>54</td>
+      <td>20</td>
+      <td>39</td>
+      <td>23</td>
+      <td>19</td>
+      <td>24</td>
+      <td>13</td>
+      <td>13</td>
+      <td>6</td>
+      <td>8</td>
+      <td>12</td>
+      <td>49</td>
+      <td>47</td>
+      <td>49</td>
+      <td>48</td>
+      <td>50</td>
+      <td>11</td>
+      <td>11</td>
+      <td>38</td>
+      <td>18</td>
+      <td>9</td>
+      <td>10</td>
+      <td>17</td>
+      <td>8</td>
+      <td>34</td>
+      <td>30</td>
+      <td>22</td>
+      <td>13</td>
+      <td>59</td>
+      <td>24</td>
+      <td>11</td>
+      <td>64</td>
+      <td>12</td>
+      <td>7</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>239933</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17940</th>
+      <td>A. Corasaniti</td>
+      <td>18</td>
+      <td>https://cdn.sofifa.org/48/18/players/235862.png</td>
+      <td>Italy</td>
+      <td>https://cdn.sofifa.org/flags/27.png</td>
+      <td>48</td>
+      <td>63</td>
+      <td>Cittadella</td>
+      <td>https://cdn.sofifa.org/24/18/teams/111993.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>798</td>
+      <td>24</td>
+      <td>18</td>
+      <td>31</td>
+      <td>48</td>
+      <td>13</td>
+      <td>33</td>
+      <td>10</td>
+      <td>14</td>
+      <td>5</td>
+      <td>6</td>
+      <td>11</td>
+      <td>49</td>
+      <td>48</td>
+      <td>49</td>
+      <td>49</td>
+      <td>48</td>
+      <td>10</td>
+      <td>7</td>
+      <td>58</td>
+      <td>23</td>
+      <td>8</td>
+      <td>8</td>
+      <td>10</td>
+      <td>7</td>
+      <td>39</td>
+      <td>22</td>
+      <td>23</td>
+      <td>14</td>
+      <td>28</td>
+      <td>25</td>
+      <td>12</td>
+      <td>42</td>
+      <td>30</td>
+      <td>9</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>235862</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17943</th>
+      <td>M. Cerofolini</td>
+      <td>18</td>
+      <td>https://cdn.sofifa.org/48/18/players/240785.png</td>
+      <td>Italy</td>
+      <td>https://cdn.sofifa.org/flags/27.png</td>
+      <td>48</td>
+      <td>67</td>
+      <td>Fiorentina</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110374.png</td>
+      <td>€50K</td>
+      <td>€2K</td>
+      <td>794</td>
+      <td>29</td>
+      <td>22</td>
+      <td>29</td>
+      <td>34</td>
+      <td>19</td>
+      <td>37</td>
+      <td>10</td>
+      <td>13</td>
+      <td>11</td>
+      <td>5</td>
+      <td>11</td>
+      <td>46</td>
+      <td>48</td>
+      <td>57</td>
+      <td>44</td>
+      <td>47</td>
+      <td>14</td>
+      <td>12</td>
+      <td>41</td>
+      <td>24</td>
+      <td>8</td>
+      <td>9</td>
+      <td>15</td>
+      <td>6</td>
+      <td>44</td>
+      <td>16</td>
+      <td>18</td>
+      <td>13</td>
+      <td>28</td>
+      <td>19</td>
+      <td>10</td>
+      <td>61</td>
+      <td>23</td>
+      <td>8</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>240785</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17945</th>
+      <td>A. Dillon</td>
+      <td>20</td>
+      <td>https://cdn.sofifa.org/48/18/players/233646.png</td>
+      <td>Republic of Ireland</td>
+      <td>https://cdn.sofifa.org/flags/25.png</td>
+      <td>48</td>
+      <td>61</td>
+      <td>Blackburn Rovers</td>
+      <td>https://cdn.sofifa.org/24/18/teams/3.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>833</td>
+      <td>30</td>
+      <td>21</td>
+      <td>33</td>
+      <td>36</td>
+      <td>11</td>
+      <td>33</td>
+      <td>12</td>
+      <td>12</td>
+      <td>12</td>
+      <td>12</td>
+      <td>13</td>
+      <td>51</td>
+      <td>45</td>
+      <td>53</td>
+      <td>48</td>
+      <td>44</td>
+      <td>14</td>
+      <td>11</td>
+      <td>48</td>
+      <td>23</td>
+      <td>13</td>
+      <td>12</td>
+      <td>15</td>
+      <td>12</td>
+      <td>45</td>
+      <td>26</td>
+      <td>24</td>
+      <td>14</td>
+      <td>25</td>
+      <td>23</td>
+      <td>12</td>
+      <td>45</td>
+      <td>26</td>
+      <td>12</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>233646</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17949</th>
+      <td>M. McElhinney</td>
+      <td>19</td>
+      <td>https://cdn.sofifa.org/48/18/players/233432.png</td>
+      <td>Republic of Ireland</td>
+      <td>https://cdn.sofifa.org/flags/25.png</td>
+      <td>48</td>
+      <td>60</td>
+      <td>Derry City</td>
+      <td>https://cdn.sofifa.org/24/18/teams/445.png</td>
+      <td>€40K</td>
+      <td>€1K</td>
+      <td>874</td>
+      <td>37</td>
+      <td>18</td>
+      <td>33</td>
+      <td>43</td>
+      <td>15</td>
+      <td>38</td>
+      <td>14</td>
+      <td>11</td>
+      <td>14</td>
+      <td>11</td>
+      <td>11</td>
+      <td>47</td>
+      <td>46</td>
+      <td>51</td>
+      <td>47</td>
+      <td>50</td>
+      <td>13</td>
+      <td>12</td>
+      <td>56</td>
+      <td>22</td>
+      <td>12</td>
+      <td>12</td>
+      <td>16</td>
+      <td>12</td>
+      <td>45</td>
+      <td>26</td>
+      <td>18</td>
+      <td>15</td>
+      <td>41</td>
+      <td>28</td>
+      <td>12</td>
+      <td>49</td>
+      <td>25</td>
+      <td>12</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>233432</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17951</th>
+      <td>M. Hurst</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/221669.png</td>
+      <td>Scotland</td>
+      <td>https://cdn.sofifa.org/flags/42.png</td>
+      <td>48</td>
+      <td>58</td>
+      <td>St. Johnstone FC</td>
+      <td>https://cdn.sofifa.org/24/18/teams/100804.png</td>
+      <td>€40K</td>
+      <td>€1K</td>
+      <td>991</td>
+      <td>40</td>
+      <td>20</td>
+      <td>45</td>
+      <td>52</td>
+      <td>25</td>
+      <td>27</td>
+      <td>19</td>
+      <td>12</td>
+      <td>13</td>
+      <td>15</td>
+      <td>19</td>
+      <td>45</td>
+      <td>49</td>
+      <td>50</td>
+      <td>50</td>
+      <td>45</td>
+      <td>15</td>
+      <td>29</td>
+      <td>55</td>
+      <td>19</td>
+      <td>20</td>
+      <td>16</td>
+      <td>29</td>
+      <td>13</td>
+      <td>47</td>
+      <td>26</td>
+      <td>25</td>
+      <td>16</td>
+      <td>42</td>
+      <td>33</td>
+      <td>15</td>
+      <td>58</td>
+      <td>20</td>
+      <td>14</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>221669</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17976</th>
+      <td>A. Kelsey</td>
+      <td>17</td>
+      <td>https://cdn.sofifa.org/48/18/players/237463.png</td>
+      <td>England</td>
+      <td>https://cdn.sofifa.org/flags/14.png</td>
+      <td>46</td>
+      <td>63</td>
+      <td>Scunthorpe United</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1949.png</td>
+      <td>€50K</td>
+      <td>€1K</td>
+      <td>755</td>
+      <td>24</td>
+      <td>16</td>
+      <td>38</td>
+      <td>26</td>
+      <td>12</td>
+      <td>23</td>
+      <td>14</td>
+      <td>13</td>
+      <td>12</td>
+      <td>5</td>
+      <td>12</td>
+      <td>46</td>
+      <td>47</td>
+      <td>49</td>
+      <td>42</td>
+      <td>48</td>
+      <td>10</td>
+      <td>9</td>
+      <td>31</td>
+      <td>21</td>
+      <td>7</td>
+      <td>9</td>
+      <td>17</td>
+      <td>6</td>
+      <td>40</td>
+      <td>19</td>
+      <td>19</td>
+      <td>10</td>
+      <td>32</td>
+      <td>28</td>
+      <td>11</td>
+      <td>50</td>
+      <td>26</td>
+      <td>6</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>237463</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17977</th>
+      <td>B. Richardson</td>
+      <td>47</td>
+      <td>https://cdn.sofifa.org/48/18/players/11728.png</td>
+      <td>England</td>
+      <td>https://cdn.sofifa.org/flags/14.png</td>
+      <td>46</td>
+      <td>46</td>
+      <td>Wycombe Wanderers</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1933.png</td>
+      <td>€0</td>
+      <td>€1K</td>
+      <td>832</td>
+      <td>25</td>
+      <td>44</td>
+      <td>35</td>
+      <td>44</td>
+      <td>22</td>
+      <td>44</td>
+      <td>11</td>
+      <td>12</td>
+      <td>11</td>
+      <td>11</td>
+      <td>11</td>
+      <td>39</td>
+      <td>50</td>
+      <td>39</td>
+      <td>50</td>
+      <td>37</td>
+      <td>12</td>
+      <td>16</td>
+      <td>51</td>
+      <td>13</td>
+      <td>16</td>
+      <td>14</td>
+      <td>22</td>
+      <td>13</td>
+      <td>51</td>
+      <td>12</td>
+      <td>13</td>
+      <td>13</td>
+      <td>25</td>
+      <td>32</td>
+      <td>12</td>
+      <td>47</td>
+      <td>17</td>
+      <td>12</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>11728</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+  </tbody>
+</table>
+<p>2235 rows × 74 columns</p>
+</div>
+
+
+
+Prefered possitions when any field is null (excluding Club)
+
+
+```python
+df_players[df_players.Club.notnull() & df_players.isnull().any(axis=1)]['Preferred Positions'].unique()
+```
+
+
+
+
+    array(['GK '], dtype=object)
+
+
+
+Players without information about CLUB
+
+
+```python
+df_players[df_players.Club.isnull()]
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Name</th>
+      <th>Age</th>
+      <th>Photo</th>
+      <th>Nationality</th>
+      <th>Flag</th>
+      <th>Overall</th>
+      <th>Potential</th>
+      <th>Club</th>
+      <th>Club Logo</th>
+      <th>Value</th>
+      <th>Wage</th>
+      <th>Special</th>
+      <th>Acceleration</th>
+      <th>Aggression</th>
+      <th>Agility</th>
+      <th>Balance</th>
+      <th>Ball control</th>
+      <th>Composure</th>
+      <th>Crossing</th>
+      <th>Curve</th>
+      <th>Dribbling</th>
+      <th>Finishing</th>
+      <th>Free kick accuracy</th>
+      <th>GK diving</th>
+      <th>GK handling</th>
+      <th>GK kicking</th>
+      <th>GK positioning</th>
+      <th>GK reflexes</th>
+      <th>Heading accuracy</th>
+      <th>Interceptions</th>
+      <th>Jumping</th>
+      <th>Long passing</th>
+      <th>Long shots</th>
+      <th>Marking</th>
+      <th>Penalties</th>
+      <th>Positioning</th>
+      <th>Reactions</th>
+      <th>Short passing</th>
+      <th>Shot power</th>
+      <th>Sliding tackle</th>
+      <th>Sprint speed</th>
+      <th>Stamina</th>
+      <th>Standing tackle</th>
+      <th>Strength</th>
+      <th>Vision</th>
+      <th>Volleys</th>
+      <th>CAM</th>
+      <th>CB</th>
+      <th>CDM</th>
+      <th>CF</th>
+      <th>CM</th>
+      <th>ID</th>
+      <th>LAM</th>
+      <th>LB</th>
+      <th>LCB</th>
+      <th>LCM</th>
+      <th>LDM</th>
+      <th>LF</th>
+      <th>LM</th>
+      <th>LS</th>
+      <th>LW</th>
+      <th>LWB</th>
+      <th>Preferred Positions</th>
+      <th>RAM</th>
+      <th>RB</th>
+      <th>RCB</th>
+      <th>RCM</th>
+      <th>RDM</th>
+      <th>RF</th>
+      <th>RM</th>
+      <th>RS</th>
+      <th>RW</th>
+      <th>RWB</th>
+      <th>ST</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>162</th>
+      <td>Oscar</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/188152.png</td>
+      <td>Brazil</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>83</td>
+      <td>86</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1961</td>
+      <td>75</td>
+      <td>31</td>
+      <td>86</td>
+      <td>80</td>
+      <td>84</td>
+      <td>83</td>
+      <td>70</td>
+      <td>77</td>
+      <td>81</td>
+      <td>75</td>
+      <td>77</td>
+      <td>12</td>
+      <td>10</td>
+      <td>15</td>
+      <td>12</td>
+      <td>12</td>
+      <td>54</td>
+      <td>34</td>
+      <td>66</td>
+      <td>78</td>
+      <td>77</td>
+      <td>37</td>
+      <td>68</td>
+      <td>81</td>
+      <td>81</td>
+      <td>83</td>
+      <td>76</td>
+      <td>47</td>
+      <td>74</td>
+      <td>76</td>
+      <td>50</td>
+      <td>36</td>
+      <td>83</td>
+      <td>63</td>
+      <td>81.0</td>
+      <td>49.0</td>
+      <td>61.0</td>
+      <td>80.0</td>
+      <td>77.0</td>
+      <td>188152</td>
+      <td>81.0</td>
+      <td>61.0</td>
+      <td>49.0</td>
+      <td>77.0</td>
+      <td>61.0</td>
+      <td>80.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>79.0</td>
+      <td>64.0</td>
+      <td>CAM</td>
+      <td>81.0</td>
+      <td>61.0</td>
+      <td>49.0</td>
+      <td>77.0</td>
+      <td>61.0</td>
+      <td>80.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>79.0</td>
+      <td>64.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>167</th>
+      <td>Adrien Silva</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/184826.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>83</td>
+      <td>83</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>2174</td>
+      <td>64</td>
+      <td>79</td>
+      <td>73</td>
+      <td>67</td>
+      <td>85</td>
+      <td>82</td>
+      <td>78</td>
+      <td>79</td>
+      <td>82</td>
+      <td>71</td>
+      <td>75</td>
+      <td>15</td>
+      <td>6</td>
+      <td>8</td>
+      <td>10</td>
+      <td>7</td>
+      <td>61</td>
+      <td>84</td>
+      <td>56</td>
+      <td>84</td>
+      <td>80</td>
+      <td>80</td>
+      <td>85</td>
+      <td>75</td>
+      <td>77</td>
+      <td>83</td>
+      <td>83</td>
+      <td>73</td>
+      <td>65</td>
+      <td>89</td>
+      <td>78</td>
+      <td>62</td>
+      <td>85</td>
+      <td>75</td>
+      <td>80.0</td>
+      <td>75.0</td>
+      <td>81.0</td>
+      <td>78.0</td>
+      <td>82.0</td>
+      <td>184826</td>
+      <td>80.0</td>
+      <td>78.0</td>
+      <td>75.0</td>
+      <td>82.0</td>
+      <td>81.0</td>
+      <td>78.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>79.0</td>
+      <td>CDM CM</td>
+      <td>80.0</td>
+      <td>78.0</td>
+      <td>75.0</td>
+      <td>82.0</td>
+      <td>81.0</td>
+      <td>78.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>274</th>
+      <td>A. Witsel</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/177413.png</td>
+      <td>Belgium</td>
+      <td>https://cdn.sofifa.org/flags/7.png</td>
+      <td>82</td>
+      <td>82</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/7.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>2143</td>
+      <td>67</td>
+      <td>78</td>
+      <td>82</td>
+      <td>60</td>
+      <td>85</td>
+      <td>86</td>
+      <td>69</td>
+      <td>69</td>
+      <td>83</td>
+      <td>71</td>
+      <td>68</td>
+      <td>5</td>
+      <td>7</td>
+      <td>7</td>
+      <td>10</td>
+      <td>7</td>
+      <td>77</td>
+      <td>80</td>
+      <td>72</td>
+      <td>78</td>
+      <td>74</td>
+      <td>69</td>
+      <td>81</td>
+      <td>75</td>
+      <td>81</td>
+      <td>83</td>
+      <td>78</td>
+      <td>71</td>
+      <td>74</td>
+      <td>85</td>
+      <td>73</td>
+      <td>79</td>
+      <td>78</td>
+      <td>67</td>
+      <td>79.0</td>
+      <td>76.0</td>
+      <td>79.0</td>
+      <td>78.0</td>
+      <td>80.0</td>
+      <td>177413</td>
+      <td>79.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>80.0</td>
+      <td>79.0</td>
+      <td>78.0</td>
+      <td>78.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>77.0</td>
+      <td>CAM CDM CM</td>
+      <td>79.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>80.0</td>
+      <td>79.0</td>
+      <td>78.0</td>
+      <td>78.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+    </tr>
+    <tr>
+      <th>472</th>
+      <td>M. Berg</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/176733.png</td>
+      <td>Sweden</td>
+      <td>https://cdn.sofifa.org/flags/46.png</td>
+      <td>80</td>
+      <td>80</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/46.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1841</td>
+      <td>74</td>
+      <td>61</td>
+      <td>71</td>
+      <td>71</td>
+      <td>77</td>
+      <td>75</td>
+      <td>56</td>
+      <td>66</td>
+      <td>72</td>
+      <td>82</td>
+      <td>47</td>
+      <td>10</td>
+      <td>7</td>
+      <td>12</td>
+      <td>8</td>
+      <td>14</td>
+      <td>77</td>
+      <td>28</td>
+      <td>74</td>
+      <td>51</td>
+      <td>74</td>
+      <td>12</td>
+      <td>70</td>
+      <td>83</td>
+      <td>75</td>
+      <td>72</td>
+      <td>79</td>
+      <td>25</td>
+      <td>75</td>
+      <td>69</td>
+      <td>33</td>
+      <td>76</td>
+      <td>66</td>
+      <td>74</td>
+      <td>73.0</td>
+      <td>47.0</td>
+      <td>51.0</td>
+      <td>76.0</td>
+      <td>66.0</td>
+      <td>176733</td>
+      <td>73.0</td>
+      <td>50.0</td>
+      <td>47.0</td>
+      <td>66.0</td>
+      <td>51.0</td>
+      <td>76.0</td>
+      <td>71.0</td>
+      <td>78.0</td>
+      <td>73.0</td>
+      <td>53.0</td>
+      <td>CF ST</td>
+      <td>73.0</td>
+      <td>50.0</td>
+      <td>47.0</td>
+      <td>66.0</td>
+      <td>51.0</td>
+      <td>76.0</td>
+      <td>71.0</td>
+      <td>78.0</td>
+      <td>73.0</td>
+      <td>53.0</td>
+      <td>78.0</td>
+    </tr>
+    <tr>
+      <th>488</th>
+      <td>Renato Augusto</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/169195.png</td>
+      <td>Brazil</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>80</td>
+      <td>80</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>2069</td>
+      <td>66</td>
+      <td>53</td>
+      <td>66</td>
+      <td>66</td>
+      <td>84</td>
+      <td>68</td>
+      <td>79</td>
+      <td>80</td>
+      <td>85</td>
+      <td>65</td>
+      <td>75</td>
+      <td>6</td>
+      <td>11</td>
+      <td>16</td>
+      <td>15</td>
+      <td>8</td>
+      <td>57</td>
+      <td>70</td>
+      <td>49</td>
+      <td>81</td>
+      <td>81</td>
+      <td>67</td>
+      <td>68</td>
+      <td>75</td>
+      <td>83</td>
+      <td>81</td>
+      <td>81</td>
+      <td>59</td>
+      <td>67</td>
+      <td>71</td>
+      <td>68</td>
+      <td>78</td>
+      <td>81</td>
+      <td>77</td>
+      <td>79.0</td>
+      <td>68.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>79.0</td>
+      <td>169195</td>
+      <td>79.0</td>
+      <td>71.0</td>
+      <td>68.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>78.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>73.0</td>
+      <td>LM CDM CAM CM</td>
+      <td>79.0</td>
+      <td>71.0</td>
+      <td>68.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>78.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>73.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>658</th>
+      <td>Gervinho</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/170733.png</td>
+      <td>Ivory Coast</td>
+      <td>https://cdn.sofifa.org/flags/108.png</td>
+      <td>79</td>
+      <td>79</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/108.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1871</td>
+      <td>91</td>
+      <td>51</td>
+      <td>88</td>
+      <td>76</td>
+      <td>78</td>
+      <td>71</td>
+      <td>75</td>
+      <td>69</td>
+      <td>83</td>
+      <td>72</td>
+      <td>43</td>
+      <td>14</td>
+      <td>5</td>
+      <td>12</td>
+      <td>10</td>
+      <td>13</td>
+      <td>63</td>
+      <td>39</td>
+      <td>65</td>
+      <td>67</td>
+      <td>61</td>
+      <td>13</td>
+      <td>63</td>
+      <td>80</td>
+      <td>75</td>
+      <td>71</td>
+      <td>69</td>
+      <td>15</td>
+      <td>92</td>
+      <td>90</td>
+      <td>29</td>
+      <td>55</td>
+      <td>74</td>
+      <td>70</td>
+      <td>76.0</td>
+      <td>43.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>170733</td>
+      <td>76.0</td>
+      <td>55.0</td>
+      <td>43.0</td>
+      <td>71.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>RW LW</td>
+      <td>76.0</td>
+      <td>55.0</td>
+      <td>43.0</td>
+      <td>71.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>79.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>925</th>
+      <td>B. Moukandjo</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/185090.png</td>
+      <td>Cameroon</td>
+      <td>https://cdn.sofifa.org/flags/103.png</td>
+      <td>77</td>
+      <td>77</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/103.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1904</td>
+      <td>90</td>
+      <td>51</td>
+      <td>83</td>
+      <td>70</td>
+      <td>75</td>
+      <td>77</td>
+      <td>72</td>
+      <td>71</td>
+      <td>79</td>
+      <td>80</td>
+      <td>71</td>
+      <td>14</td>
+      <td>14</td>
+      <td>8</td>
+      <td>12</td>
+      <td>10</td>
+      <td>68</td>
+      <td>32</td>
+      <td>71</td>
+      <td>60</td>
+      <td>65</td>
+      <td>25</td>
+      <td>79</td>
+      <td>77</td>
+      <td>76</td>
+      <td>71</td>
+      <td>78</td>
+      <td>19</td>
+      <td>91</td>
+      <td>70</td>
+      <td>20</td>
+      <td>65</td>
+      <td>65</td>
+      <td>72</td>
+      <td>74.0</td>
+      <td>44.0</td>
+      <td>51.0</td>
+      <td>76.0</td>
+      <td>66.0</td>
+      <td>185090</td>
+      <td>74.0</td>
+      <td>53.0</td>
+      <td>44.0</td>
+      <td>66.0</td>
+      <td>51.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>56.0</td>
+      <td>RM ST</td>
+      <td>74.0</td>
+      <td>53.0</td>
+      <td>44.0</td>
+      <td>66.0</td>
+      <td>51.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>56.0</td>
+      <td>76.0</td>
+    </tr>
+    <tr>
+      <th>944</th>
+      <td>B. Dočkal</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/181271.png</td>
+      <td>Czech Republic</td>
+      <td>https://cdn.sofifa.org/flags/12.png</td>
+      <td>77</td>
+      <td>77</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/12.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1964</td>
+      <td>68</td>
+      <td>59</td>
+      <td>67</td>
+      <td>71</td>
+      <td>79</td>
+      <td>75</td>
+      <td>82</td>
+      <td>82</td>
+      <td>77</td>
+      <td>69</td>
+      <td>80</td>
+      <td>10</td>
+      <td>9</td>
+      <td>14</td>
+      <td>11</td>
+      <td>8</td>
+      <td>57</td>
+      <td>54</td>
+      <td>64</td>
+      <td>77</td>
+      <td>78</td>
+      <td>38</td>
+      <td>75</td>
+      <td>72</td>
+      <td>74</td>
+      <td>79</td>
+      <td>78</td>
+      <td>38</td>
+      <td>66</td>
+      <td>66</td>
+      <td>52</td>
+      <td>57</td>
+      <td>81</td>
+      <td>72</td>
+      <td>76.0</td>
+      <td>55.0</td>
+      <td>63.0</td>
+      <td>75.0</td>
+      <td>74.0</td>
+      <td>181271</td>
+      <td>76.0</td>
+      <td>61.0</td>
+      <td>55.0</td>
+      <td>74.0</td>
+      <td>63.0</td>
+      <td>75.0</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>75.0</td>
+      <td>64.0</td>
+      <td>CM CAM</td>
+      <td>76.0</td>
+      <td>61.0</td>
+      <td>55.0</td>
+      <td>74.0</td>
+      <td>63.0</td>
+      <td>75.0</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>75.0</td>
+      <td>64.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>1019</th>
+      <td>Gil</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/193869.png</td>
+      <td>Brazil</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>77</td>
+      <td>77</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1701</td>
+      <td>53</td>
+      <td>81</td>
+      <td>41</td>
+      <td>40</td>
+      <td>62</td>
+      <td>75</td>
+      <td>47</td>
+      <td>39</td>
+      <td>51</td>
+      <td>28</td>
+      <td>34</td>
+      <td>9</td>
+      <td>11</td>
+      <td>6</td>
+      <td>11</td>
+      <td>14</td>
+      <td>75</td>
+      <td>78</td>
+      <td>60</td>
+      <td>69</td>
+      <td>41</td>
+      <td>78</td>
+      <td>42</td>
+      <td>50</td>
+      <td>74</td>
+      <td>70</td>
+      <td>69</td>
+      <td>76</td>
+      <td>67</td>
+      <td>71</td>
+      <td>77</td>
+      <td>86</td>
+      <td>68</td>
+      <td>23</td>
+      <td>58.0</td>
+      <td>76.0</td>
+      <td>74.0</td>
+      <td>57.0</td>
+      <td>65.0</td>
+      <td>193869</td>
+      <td>58.0</td>
+      <td>70.0</td>
+      <td>76.0</td>
+      <td>65.0</td>
+      <td>74.0</td>
+      <td>57.0</td>
+      <td>58.0</td>
+      <td>57.0</td>
+      <td>55.0</td>
+      <td>68.0</td>
+      <td>CB</td>
+      <td>58.0</td>
+      <td>70.0</td>
+      <td>76.0</td>
+      <td>65.0</td>
+      <td>74.0</td>
+      <td>57.0</td>
+      <td>58.0</td>
+      <td>57.0</td>
+      <td>55.0</td>
+      <td>68.0</td>
+      <td>57.0</td>
+    </tr>
+    <tr>
+      <th>1273</th>
+      <td>C. Riveros</td>
+      <td>34</td>
+      <td>https://cdn.sofifa.org/48/18/players/174381.png</td>
+      <td>Paraguay</td>
+      <td>https://cdn.sofifa.org/flags/58.png</td>
+      <td>76</td>
+      <td>76</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/58.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1999</td>
+      <td>60</td>
+      <td>72</td>
+      <td>79</td>
+      <td>70</td>
+      <td>76</td>
+      <td>80</td>
+      <td>74</td>
+      <td>67</td>
+      <td>69</td>
+      <td>69</td>
+      <td>68</td>
+      <td>9</td>
+      <td>13</td>
+      <td>6</td>
+      <td>16</td>
+      <td>15</td>
+      <td>70</td>
+      <td>65</td>
+      <td>65</td>
+      <td>77</td>
+      <td>71</td>
+      <td>63</td>
+      <td>71</td>
+      <td>76</td>
+      <td>72</td>
+      <td>81</td>
+      <td>71</td>
+      <td>62</td>
+      <td>53</td>
+      <td>75</td>
+      <td>61</td>
+      <td>62</td>
+      <td>77</td>
+      <td>64</td>
+      <td>74.0</td>
+      <td>66.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>75.0</td>
+      <td>174381</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>66.0</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>72.0</td>
+      <td>70.0</td>
+      <td>72.0</td>
+      <td>69.0</td>
+      <td>CDM CM</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>66.0</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>72.0</td>
+      <td>70.0</td>
+      <td>72.0</td>
+      <td>69.0</td>
+      <td>70.0</td>
+    </tr>
+    <tr>
+      <th>1351</th>
+      <td>Zheng Zhi</td>
+      <td>36</td>
+      <td>https://cdn.sofifa.org/48/18/players/158293.png</td>
+      <td>China PR</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>76</td>
+      <td>76</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>2014</td>
+      <td>68</td>
+      <td>75</td>
+      <td>65</td>
+      <td>67</td>
+      <td>77</td>
+      <td>75</td>
+      <td>65</td>
+      <td>76</td>
+      <td>74</td>
+      <td>60</td>
+      <td>68</td>
+      <td>13</td>
+      <td>16</td>
+      <td>6</td>
+      <td>10</td>
+      <td>14</td>
+      <td>65</td>
+      <td>75</td>
+      <td>66</td>
+      <td>71</td>
+      <td>70</td>
+      <td>75</td>
+      <td>68</td>
+      <td>60</td>
+      <td>71</td>
+      <td>82</td>
+      <td>68</td>
+      <td>68</td>
+      <td>58</td>
+      <td>75</td>
+      <td>72</td>
+      <td>68</td>
+      <td>76</td>
+      <td>72</td>
+      <td>72.0</td>
+      <td>72.0</td>
+      <td>75.0</td>
+      <td>70.0</td>
+      <td>74.0</td>
+      <td>158293</td>
+      <td>72.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>74.0</td>
+      <td>75.0</td>
+      <td>70.0</td>
+      <td>71.0</td>
+      <td>67.0</td>
+      <td>70.0</td>
+      <td>72.0</td>
+      <td>CB CM CDM</td>
+      <td>72.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>74.0</td>
+      <td>75.0</td>
+      <td>70.0</td>
+      <td>71.0</td>
+      <td>67.0</td>
+      <td>70.0</td>
+      <td>72.0</td>
+      <td>67.0</td>
+    </tr>
+    <tr>
+      <th>1402</th>
+      <td>P. Tau</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/225144.png</td>
+      <td>South Africa</td>
+      <td>https://cdn.sofifa.org/flags/140.png</td>
+      <td>76</td>
+      <td>78</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/140.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1774</td>
+      <td>79</td>
+      <td>43</td>
+      <td>75</td>
+      <td>88</td>
+      <td>77</td>
+      <td>74</td>
+      <td>75</td>
+      <td>68</td>
+      <td>76</td>
+      <td>82</td>
+      <td>45</td>
+      <td>6</td>
+      <td>13</td>
+      <td>13</td>
+      <td>15</td>
+      <td>11</td>
+      <td>49</td>
+      <td>29</td>
+      <td>45</td>
+      <td>53</td>
+      <td>67</td>
+      <td>26</td>
+      <td>65</td>
+      <td>77</td>
+      <td>70</td>
+      <td>72</td>
+      <td>67</td>
+      <td>25</td>
+      <td>77</td>
+      <td>67</td>
+      <td>35</td>
+      <td>41</td>
+      <td>75</td>
+      <td>68</td>
+      <td>74.0</td>
+      <td>41.0</td>
+      <td>51.0</td>
+      <td>75.0</td>
+      <td>67.0</td>
+      <td>225144</td>
+      <td>74.0</td>
+      <td>52.0</td>
+      <td>41.0</td>
+      <td>67.0</td>
+      <td>51.0</td>
+      <td>75.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>76.0</td>
+      <td>56.0</td>
+      <td>CAM RW</td>
+      <td>74.0</td>
+      <td>52.0</td>
+      <td>41.0</td>
+      <td>67.0</td>
+      <td>51.0</td>
+      <td>75.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>76.0</td>
+      <td>56.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>1549</th>
+      <td>E. Paredes</td>
+      <td>36</td>
+      <td>https://cdn.sofifa.org/48/18/players/196073.png</td>
+      <td>Chile</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>76</td>
+      <td>76</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1875</td>
+      <td>69</td>
+      <td>55</td>
+      <td>70</td>
+      <td>68</td>
+      <td>76</td>
+      <td>70</td>
+      <td>62</td>
+      <td>69</td>
+      <td>73</td>
+      <td>80</td>
+      <td>75</td>
+      <td>12</td>
+      <td>15</td>
+      <td>11</td>
+      <td>9</td>
+      <td>7</td>
+      <td>70</td>
+      <td>30</td>
+      <td>72</td>
+      <td>69</td>
+      <td>71</td>
+      <td>26</td>
+      <td>78</td>
+      <td>80</td>
+      <td>74</td>
+      <td>69</td>
+      <td>74</td>
+      <td>29</td>
+      <td>68</td>
+      <td>76</td>
+      <td>22</td>
+      <td>81</td>
+      <td>69</td>
+      <td>66</td>
+      <td>73.0</td>
+      <td>47.0</td>
+      <td>53.0</td>
+      <td>74.0</td>
+      <td>68.0</td>
+      <td>196073</td>
+      <td>73.0</td>
+      <td>51.0</td>
+      <td>47.0</td>
+      <td>68.0</td>
+      <td>53.0</td>
+      <td>74.0</td>
+      <td>72.0</td>
+      <td>75.0</td>
+      <td>72.0</td>
+      <td>54.0</td>
+      <td>ST</td>
+      <td>73.0</td>
+      <td>51.0</td>
+      <td>47.0</td>
+      <td>68.0</td>
+      <td>53.0</td>
+      <td>74.0</td>
+      <td>72.0</td>
+      <td>75.0</td>
+      <td>72.0</td>
+      <td>54.0</td>
+      <td>75.0</td>
+    </tr>
+    <tr>
+      <th>1597</th>
+      <td>T. Hlatshwayo</td>
+      <td>27</td>
+      <td>https://cdn.sofifa.org/48/18/players/219911.png</td>
+      <td>South Africa</td>
+      <td>https://cdn.sofifa.org/flags/140.png</td>
+      <td>75</td>
+      <td>77</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/140.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1481</td>
+      <td>58</td>
+      <td>78</td>
+      <td>49</td>
+      <td>33</td>
+      <td>34</td>
+      <td>71</td>
+      <td>39</td>
+      <td>31</td>
+      <td>31</td>
+      <td>21</td>
+      <td>32</td>
+      <td>12</td>
+      <td>13</td>
+      <td>11</td>
+      <td>7</td>
+      <td>7</td>
+      <td>75</td>
+      <td>71</td>
+      <td>65</td>
+      <td>51</td>
+      <td>23</td>
+      <td>80</td>
+      <td>45</td>
+      <td>29</td>
+      <td>64</td>
+      <td>69</td>
+      <td>51</td>
+      <td>75</td>
+      <td>61</td>
+      <td>50</td>
+      <td>77</td>
+      <td>84</td>
+      <td>26</td>
+      <td>29</td>
+      <td>41.0</td>
+      <td>74.0</td>
+      <td>64.0</td>
+      <td>40.0</td>
+      <td>47.0</td>
+      <td>219911</td>
+      <td>41.0</td>
+      <td>64.0</td>
+      <td>74.0</td>
+      <td>47.0</td>
+      <td>64.0</td>
+      <td>40.0</td>
+      <td>43.0</td>
+      <td>45.0</td>
+      <td>40.0</td>
+      <td>60.0</td>
+      <td>RB CB</td>
+      <td>41.0</td>
+      <td>64.0</td>
+      <td>74.0</td>
+      <td>47.0</td>
+      <td>64.0</td>
+      <td>40.0</td>
+      <td>43.0</td>
+      <td>45.0</td>
+      <td>40.0</td>
+      <td>60.0</td>
+      <td>45.0</td>
+    </tr>
+    <tr>
+      <th>1802</th>
+      <td>D. González</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/209523.png</td>
+      <td>Paraguay</td>
+      <td>https://cdn.sofifa.org/flags/58.png</td>
+      <td>75</td>
+      <td>82</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/58.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1890</td>
+      <td>85</td>
+      <td>51</td>
+      <td>86</td>
+      <td>83</td>
+      <td>73</td>
+      <td>61</td>
+      <td>67</td>
+      <td>69</td>
+      <td>80</td>
+      <td>68</td>
+      <td>33</td>
+      <td>15</td>
+      <td>15</td>
+      <td>15</td>
+      <td>14</td>
+      <td>13</td>
+      <td>56</td>
+      <td>34</td>
+      <td>73</td>
+      <td>69</td>
+      <td>66</td>
+      <td>34</td>
+      <td>67</td>
+      <td>74</td>
+      <td>71</td>
+      <td>70</td>
+      <td>70</td>
+      <td>33</td>
+      <td>86</td>
+      <td>77</td>
+      <td>51</td>
+      <td>63</td>
+      <td>69</td>
+      <td>60</td>
+      <td>73.0</td>
+      <td>51.0</td>
+      <td>57.0</td>
+      <td>73.0</td>
+      <td>69.0</td>
+      <td>209523</td>
+      <td>73.0</td>
+      <td>57.0</td>
+      <td>51.0</td>
+      <td>69.0</td>
+      <td>57.0</td>
+      <td>73.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>74.0</td>
+      <td>60.0</td>
+      <td>LM RM</td>
+      <td>73.0</td>
+      <td>57.0</td>
+      <td>51.0</td>
+      <td>69.0</td>
+      <td>57.0</td>
+      <td>73.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>74.0</td>
+      <td>60.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>1819</th>
+      <td>M. Martins</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/181375.png</td>
+      <td>Bolivia</td>
+      <td>https://cdn.sofifa.org/flags/53.png</td>
+      <td>75</td>
+      <td>75</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/53.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1782</td>
+      <td>64</td>
+      <td>71</td>
+      <td>67</td>
+      <td>58</td>
+      <td>71</td>
+      <td>72</td>
+      <td>58</td>
+      <td>57</td>
+      <td>70</td>
+      <td>77</td>
+      <td>57</td>
+      <td>8</td>
+      <td>8</td>
+      <td>9</td>
+      <td>12</td>
+      <td>15</td>
+      <td>75</td>
+      <td>24</td>
+      <td>70</td>
+      <td>55</td>
+      <td>71</td>
+      <td>22</td>
+      <td>76</td>
+      <td>79</td>
+      <td>70</td>
+      <td>69</td>
+      <td>80</td>
+      <td>23</td>
+      <td>61</td>
+      <td>66</td>
+      <td>24</td>
+      <td>79</td>
+      <td>65</td>
+      <td>71</td>
+      <td>69.0</td>
+      <td>46.0</td>
+      <td>50.0</td>
+      <td>71.0</td>
+      <td>63.0</td>
+      <td>181375</td>
+      <td>69.0</td>
+      <td>47.0</td>
+      <td>46.0</td>
+      <td>63.0</td>
+      <td>50.0</td>
+      <td>71.0</td>
+      <td>68.0</td>
+      <td>74.0</td>
+      <td>69.0</td>
+      <td>50.0</td>
+      <td>ST</td>
+      <td>69.0</td>
+      <td>47.0</td>
+      <td>46.0</td>
+      <td>63.0</td>
+      <td>50.0</td>
+      <td>71.0</td>
+      <td>68.0</td>
+      <td>74.0</td>
+      <td>69.0</td>
+      <td>50.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>1826</th>
+      <td>J. Beausejour</td>
+      <td>33</td>
+      <td>https://cdn.sofifa.org/48/18/players/158851.png</td>
+      <td>Chile</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>75</td>
+      <td>75</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>2080</td>
+      <td>81</td>
+      <td>79</td>
+      <td>88</td>
+      <td>76</td>
+      <td>75</td>
+      <td>74</td>
+      <td>79</td>
+      <td>77</td>
+      <td>74</td>
+      <td>67</td>
+      <td>70</td>
+      <td>12</td>
+      <td>12</td>
+      <td>12</td>
+      <td>6</td>
+      <td>13</td>
+      <td>64</td>
+      <td>67</td>
+      <td>63</td>
+      <td>66</td>
+      <td>63</td>
+      <td>71</td>
+      <td>68</td>
+      <td>75</td>
+      <td>70</td>
+      <td>69</td>
+      <td>67</td>
+      <td>75</td>
+      <td>82</td>
+      <td>78</td>
+      <td>74</td>
+      <td>86</td>
+      <td>69</td>
+      <td>52</td>
+      <td>72.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>72.0</td>
+      <td>71.0</td>
+      <td>158851</td>
+      <td>72.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>72.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>74.0</td>
+      <td>74.0</td>
+      <td>LW LB</td>
+      <td>72.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>72.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>74.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>1888</th>
+      <td>C. Rodríguez</td>
+      <td>31</td>
+      <td>https://cdn.sofifa.org/48/18/players/170664.png</td>
+      <td>Uruguay</td>
+      <td>https://cdn.sofifa.org/flags/60.png</td>
+      <td>75</td>
+      <td>75</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/60.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1991</td>
+      <td>70</td>
+      <td>69</td>
+      <td>67</td>
+      <td>72</td>
+      <td>79</td>
+      <td>81</td>
+      <td>72</td>
+      <td>73</td>
+      <td>80</td>
+      <td>64</td>
+      <td>73</td>
+      <td>7</td>
+      <td>13</td>
+      <td>16</td>
+      <td>13</td>
+      <td>14</td>
+      <td>62</td>
+      <td>59</td>
+      <td>70</td>
+      <td>72</td>
+      <td>72</td>
+      <td>50</td>
+      <td>66</td>
+      <td>72</td>
+      <td>72</td>
+      <td>76</td>
+      <td>80</td>
+      <td>55</td>
+      <td>71</td>
+      <td>69</td>
+      <td>55</td>
+      <td>71</td>
+      <td>72</td>
+      <td>65</td>
+      <td>74.0</td>
+      <td>62.0</td>
+      <td>66.0</td>
+      <td>74.0</td>
+      <td>72.0</td>
+      <td>170664</td>
+      <td>74.0</td>
+      <td>64.0</td>
+      <td>62.0</td>
+      <td>72.0</td>
+      <td>66.0</td>
+      <td>74.0</td>
+      <td>74.0</td>
+      <td>72.0</td>
+      <td>73.0</td>
+      <td>67.0</td>
+      <td>LM CAM</td>
+      <td>74.0</td>
+      <td>64.0</td>
+      <td>62.0</td>
+      <td>72.0</td>
+      <td>66.0</td>
+      <td>74.0</td>
+      <td>74.0</td>
+      <td>72.0</td>
+      <td>73.0</td>
+      <td>67.0</td>
+      <td>72.0</td>
+    </tr>
+    <tr>
+      <th>1899</th>
+      <td>C. Toselli</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/189357.png</td>
+      <td>Chile</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>75</td>
+      <td>75</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1332</td>
+      <td>56</td>
+      <td>45</td>
+      <td>45</td>
+      <td>40</td>
+      <td>33</td>
+      <td>58</td>
+      <td>20</td>
+      <td>18</td>
+      <td>16</td>
+      <td>23</td>
+      <td>19</td>
+      <td>75</td>
+      <td>74</td>
+      <td>69</td>
+      <td>76</td>
+      <td>76</td>
+      <td>17</td>
+      <td>30</td>
+      <td>76</td>
+      <td>32</td>
+      <td>25</td>
+      <td>19</td>
+      <td>20</td>
+      <td>20</td>
+      <td>68</td>
+      <td>41</td>
+      <td>30</td>
+      <td>14</td>
+      <td>43</td>
+      <td>44</td>
+      <td>19</td>
+      <td>70</td>
+      <td>55</td>
+      <td>24</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>189357</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2000</th>
+      <td>G. Jara</td>
+      <td>31</td>
+      <td>https://cdn.sofifa.org/48/18/players/194795.png</td>
+      <td>Chile</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>75</td>
+      <td>75</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1830</td>
+      <td>67</td>
+      <td>90</td>
+      <td>73</td>
+      <td>72</td>
+      <td>69</td>
+      <td>75</td>
+      <td>59</td>
+      <td>28</td>
+      <td>63</td>
+      <td>45</td>
+      <td>47</td>
+      <td>10</td>
+      <td>9</td>
+      <td>11</td>
+      <td>13</td>
+      <td>14</td>
+      <td>69</td>
+      <td>74</td>
+      <td>78</td>
+      <td>77</td>
+      <td>46</td>
+      <td>74</td>
+      <td>45</td>
+      <td>51</td>
+      <td>70</td>
+      <td>71</td>
+      <td>58</td>
+      <td>73</td>
+      <td>67</td>
+      <td>69</td>
+      <td>72</td>
+      <td>76</td>
+      <td>62</td>
+      <td>28</td>
+      <td>63.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>61.0</td>
+      <td>67.0</td>
+      <td>194795</td>
+      <td>63.0</td>
+      <td>70.0</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>73.0</td>
+      <td>61.0</td>
+      <td>64.0</td>
+      <td>60.0</td>
+      <td>62.0</td>
+      <td>69.0</td>
+      <td>CB</td>
+      <td>63.0</td>
+      <td>70.0</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>73.0</td>
+      <td>61.0</td>
+      <td>64.0</td>
+      <td>60.0</td>
+      <td>62.0</td>
+      <td>69.0</td>
+      <td>60.0</td>
+    </tr>
+    <tr>
+      <th>2090</th>
+      <td>Zeng Cheng</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/182043.png</td>
+      <td>China PR</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>74</td>
+      <td>74</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1114</td>
+      <td>30</td>
+      <td>40</td>
+      <td>31</td>
+      <td>44</td>
+      <td>25</td>
+      <td>45</td>
+      <td>18</td>
+      <td>13</td>
+      <td>13</td>
+      <td>11</td>
+      <td>15</td>
+      <td>72</td>
+      <td>70</td>
+      <td>72</td>
+      <td>77</td>
+      <td>73</td>
+      <td>11</td>
+      <td>27</td>
+      <td>55</td>
+      <td>45</td>
+      <td>11</td>
+      <td>11</td>
+      <td>18</td>
+      <td>13</td>
+      <td>74</td>
+      <td>23</td>
+      <td>11</td>
+      <td>11</td>
+      <td>36</td>
+      <td>41</td>
+      <td>11</td>
+      <td>37</td>
+      <td>64</td>
+      <td>11</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>182043</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2241</th>
+      <td>T. Sivok</td>
+      <td>33</td>
+      <td>https://cdn.sofifa.org/48/18/players/155989.png</td>
+      <td>Czech Republic</td>
+      <td>https://cdn.sofifa.org/flags/12.png</td>
+      <td>74</td>
+      <td>74</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/12.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1694</td>
+      <td>46</td>
+      <td>73</td>
+      <td>50</td>
+      <td>55</td>
+      <td>59</td>
+      <td>66</td>
+      <td>50</td>
+      <td>47</td>
+      <td>52</td>
+      <td>36</td>
+      <td>43</td>
+      <td>10</td>
+      <td>11</td>
+      <td>14</td>
+      <td>13</td>
+      <td>8</td>
+      <td>81</td>
+      <td>73</td>
+      <td>78</td>
+      <td>60</td>
+      <td>49</td>
+      <td>77</td>
+      <td>47</td>
+      <td>40</td>
+      <td>67</td>
+      <td>65</td>
+      <td>61</td>
+      <td>71</td>
+      <td>48</td>
+      <td>64</td>
+      <td>75</td>
+      <td>75</td>
+      <td>52</td>
+      <td>44</td>
+      <td>54.0</td>
+      <td>73.0</td>
+      <td>68.0</td>
+      <td>53.0</td>
+      <td>59.0</td>
+      <td>155989</td>
+      <td>54.0</td>
+      <td>66.0</td>
+      <td>73.0</td>
+      <td>59.0</td>
+      <td>68.0</td>
+      <td>53.0</td>
+      <td>54.0</td>
+      <td>54.0</td>
+      <td>52.0</td>
+      <td>64.0</td>
+      <td>CB</td>
+      <td>54.0</td>
+      <td>66.0</td>
+      <td>73.0</td>
+      <td>59.0</td>
+      <td>68.0</td>
+      <td>53.0</td>
+      <td>54.0</td>
+      <td>54.0</td>
+      <td>52.0</td>
+      <td>64.0</td>
+      <td>54.0</td>
+    </tr>
+    <tr>
+      <th>2246</th>
+      <td>T. Sainsbury</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/199000.png</td>
+      <td>Australia</td>
+      <td>https://cdn.sofifa.org/flags/195.png</td>
+      <td>74</td>
+      <td>77</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/195.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1848</td>
+      <td>73</td>
+      <td>64</td>
+      <td>67</td>
+      <td>60</td>
+      <td>62</td>
+      <td>70</td>
+      <td>61</td>
+      <td>62</td>
+      <td>58</td>
+      <td>46</td>
+      <td>31</td>
+      <td>13</td>
+      <td>12</td>
+      <td>11</td>
+      <td>14</td>
+      <td>6</td>
+      <td>74</td>
+      <td>76</td>
+      <td>77</td>
+      <td>68</td>
+      <td>43</td>
+      <td>78</td>
+      <td>65</td>
+      <td>56</td>
+      <td>70</td>
+      <td>74</td>
+      <td>61</td>
+      <td>74</td>
+      <td>74</td>
+      <td>68</td>
+      <td>73</td>
+      <td>75</td>
+      <td>69</td>
+      <td>33</td>
+      <td>64.0</td>
+      <td>73.0</td>
+      <td>71.0</td>
+      <td>62.0</td>
+      <td>66.0</td>
+      <td>199000</td>
+      <td>64.0</td>
+      <td>72.0</td>
+      <td>73.0</td>
+      <td>66.0</td>
+      <td>71.0</td>
+      <td>62.0</td>
+      <td>64.0</td>
+      <td>61.0</td>
+      <td>62.0</td>
+      <td>70.0</td>
+      <td>CB</td>
+      <td>64.0</td>
+      <td>72.0</td>
+      <td>73.0</td>
+      <td>66.0</td>
+      <td>71.0</td>
+      <td>62.0</td>
+      <td>64.0</td>
+      <td>61.0</td>
+      <td>62.0</td>
+      <td>70.0</td>
+      <td>61.0</td>
+    </tr>
+    <tr>
+      <th>2281</th>
+      <td>Gao Lin</td>
+      <td>31</td>
+      <td>https://cdn.sofifa.org/48/18/players/158309.png</td>
+      <td>China PR</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>74</td>
+      <td>74</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1965</td>
+      <td>79</td>
+      <td>62</td>
+      <td>72</td>
+      <td>67</td>
+      <td>69</td>
+      <td>74</td>
+      <td>68</td>
+      <td>60</td>
+      <td>75</td>
+      <td>68</td>
+      <td>60</td>
+      <td>10</td>
+      <td>9</td>
+      <td>7</td>
+      <td>11</td>
+      <td>9</td>
+      <td>77</td>
+      <td>62</td>
+      <td>68</td>
+      <td>75</td>
+      <td>69</td>
+      <td>52</td>
+      <td>76</td>
+      <td>72</td>
+      <td>75</td>
+      <td>76</td>
+      <td>80</td>
+      <td>51</td>
+      <td>67</td>
+      <td>73</td>
+      <td>52</td>
+      <td>74</td>
+      <td>75</td>
+      <td>65</td>
+      <td>73.0</td>
+      <td>62.0</td>
+      <td>66.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>158309</td>
+      <td>73.0</td>
+      <td>64.0</td>
+      <td>62.0</td>
+      <td>72.0</td>
+      <td>66.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>66.0</td>
+      <td>LM RW LW ST</td>
+      <td>73.0</td>
+      <td>64.0</td>
+      <td>62.0</td>
+      <td>72.0</td>
+      <td>66.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>66.0</td>
+      <td>73.0</td>
+    </tr>
+    <tr>
+      <th>2350</th>
+      <td>Z. Gera</td>
+      <td>38</td>
+      <td>https://cdn.sofifa.org/48/18/players/137089.png</td>
+      <td>Hungary</td>
+      <td>https://cdn.sofifa.org/flags/23.png</td>
+      <td>74</td>
+      <td>74</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/23.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>2005</td>
+      <td>51</td>
+      <td>61</td>
+      <td>69</td>
+      <td>66</td>
+      <td>81</td>
+      <td>71</td>
+      <td>80</td>
+      <td>77</td>
+      <td>77</td>
+      <td>69</td>
+      <td>82</td>
+      <td>14</td>
+      <td>12</td>
+      <td>12</td>
+      <td>7</td>
+      <td>9</td>
+      <td>71</td>
+      <td>67</td>
+      <td>72</td>
+      <td>68</td>
+      <td>74</td>
+      <td>53</td>
+      <td>74</td>
+      <td>70</td>
+      <td>69</td>
+      <td>80</td>
+      <td>77</td>
+      <td>68</td>
+      <td>48</td>
+      <td>67</td>
+      <td>58</td>
+      <td>66</td>
+      <td>75</td>
+      <td>81</td>
+      <td>73.0</td>
+      <td>65.0</td>
+      <td>68.0</td>
+      <td>72.0</td>
+      <td>73.0</td>
+      <td>137089</td>
+      <td>73.0</td>
+      <td>66.0</td>
+      <td>65.0</td>
+      <td>73.0</td>
+      <td>68.0</td>
+      <td>72.0</td>
+      <td>72.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>68.0</td>
+      <td>CAM CM</td>
+      <td>73.0</td>
+      <td>66.0</td>
+      <td>65.0</td>
+      <td>73.0</td>
+      <td>68.0</td>
+      <td>72.0</td>
+      <td>72.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>68.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>2424</th>
+      <td>P. Gallese</td>
+      <td>27</td>
+      <td>https://cdn.sofifa.org/48/18/players/225701.png</td>
+      <td>Peru</td>
+      <td>https://cdn.sofifa.org/flags/59.png</td>
+      <td>74</td>
+      <td>76</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/59.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1192</td>
+      <td>45</td>
+      <td>22</td>
+      <td>34</td>
+      <td>57</td>
+      <td>22</td>
+      <td>25</td>
+      <td>21</td>
+      <td>12</td>
+      <td>19</td>
+      <td>20</td>
+      <td>17</td>
+      <td>77</td>
+      <td>69</td>
+      <td>68</td>
+      <td>72</td>
+      <td>72</td>
+      <td>18</td>
+      <td>25</td>
+      <td>58</td>
+      <td>24</td>
+      <td>12</td>
+      <td>12</td>
+      <td>22</td>
+      <td>18</td>
+      <td>76</td>
+      <td>31</td>
+      <td>24</td>
+      <td>19</td>
+      <td>49</td>
+      <td>30</td>
+      <td>19</td>
+      <td>49</td>
+      <td>59</td>
+      <td>20</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>225701</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2483</th>
+      <td>V. Stoyanov</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/200896.png</td>
+      <td>Bulgaria</td>
+      <td>https://cdn.sofifa.org/flags/9.png</td>
+      <td>74</td>
+      <td>74</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/9.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1131</td>
+      <td>48</td>
+      <td>26</td>
+      <td>37</td>
+      <td>42</td>
+      <td>21</td>
+      <td>53</td>
+      <td>12</td>
+      <td>11</td>
+      <td>11</td>
+      <td>11</td>
+      <td>11</td>
+      <td>71</td>
+      <td>75</td>
+      <td>71</td>
+      <td>73</td>
+      <td>76</td>
+      <td>16</td>
+      <td>23</td>
+      <td>54</td>
+      <td>25</td>
+      <td>15</td>
+      <td>13</td>
+      <td>18</td>
+      <td>15</td>
+      <td>71</td>
+      <td>29</td>
+      <td>16</td>
+      <td>11</td>
+      <td>50</td>
+      <td>35</td>
+      <td>12</td>
+      <td>75</td>
+      <td>46</td>
+      <td>11</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>200896</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2518</th>
+      <td>J. Herrera</td>
+      <td>36</td>
+      <td>https://cdn.sofifa.org/48/18/players/174542.png</td>
+      <td>Chile</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>74</td>
+      <td>74</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1245</td>
+      <td>57</td>
+      <td>44</td>
+      <td>32</td>
+      <td>56</td>
+      <td>16</td>
+      <td>65</td>
+      <td>15</td>
+      <td>12</td>
+      <td>18</td>
+      <td>12</td>
+      <td>24</td>
+      <td>70</td>
+      <td>77</td>
+      <td>77</td>
+      <td>71</td>
+      <td>72</td>
+      <td>14</td>
+      <td>15</td>
+      <td>72</td>
+      <td>30</td>
+      <td>12</td>
+      <td>12</td>
+      <td>60</td>
+      <td>14</td>
+      <td>72</td>
+      <td>22</td>
+      <td>24</td>
+      <td>14</td>
+      <td>53</td>
+      <td>28</td>
+      <td>13</td>
+      <td>59</td>
+      <td>60</td>
+      <td>18</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>174542</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2552</th>
+      <td>Feng Xiaoting</td>
+      <td>31</td>
+      <td>https://cdn.sofifa.org/48/18/players/175589.png</td>
+      <td>China PR</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>74</td>
+      <td>74</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1816</td>
+      <td>66</td>
+      <td>65</td>
+      <td>53</td>
+      <td>63</td>
+      <td>68</td>
+      <td>66</td>
+      <td>50</td>
+      <td>52</td>
+      <td>67</td>
+      <td>34</td>
+      <td>52</td>
+      <td>11</td>
+      <td>11</td>
+      <td>15</td>
+      <td>11</td>
+      <td>13</td>
+      <td>75</td>
+      <td>75</td>
+      <td>73</td>
+      <td>75</td>
+      <td>40</td>
+      <td>73</td>
+      <td>54</td>
+      <td>60</td>
+      <td>70</td>
+      <td>70</td>
+      <td>50</td>
+      <td>75</td>
+      <td>60</td>
+      <td>71</td>
+      <td>76</td>
+      <td>71</td>
+      <td>69</td>
+      <td>48</td>
+      <td>63.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>61.0</td>
+      <td>68.0</td>
+      <td>175589</td>
+      <td>63.0</td>
+      <td>70.0</td>
+      <td>73.0</td>
+      <td>68.0</td>
+      <td>72.0</td>
+      <td>61.0</td>
+      <td>64.0</td>
+      <td>58.0</td>
+      <td>60.0</td>
+      <td>69.0</td>
+      <td>CB</td>
+      <td>63.0</td>
+      <td>70.0</td>
+      <td>73.0</td>
+      <td>68.0</td>
+      <td>72.0</td>
+      <td>61.0</td>
+      <td>64.0</td>
+      <td>58.0</td>
+      <td>60.0</td>
+      <td>69.0</td>
+      <td>58.0</td>
+    </tr>
+    <tr>
+      <th>2553</th>
+      <td>J. Fuenzalida</td>
+      <td>32</td>
+      <td>https://cdn.sofifa.org/48/18/players/196069.png</td>
+      <td>Chile</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>74</td>
+      <td>74</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>2020</td>
+      <td>82</td>
+      <td>59</td>
+      <td>77</td>
+      <td>80</td>
+      <td>78</td>
+      <td>69</td>
+      <td>76</td>
+      <td>65</td>
+      <td>79</td>
+      <td>59</td>
+      <td>59</td>
+      <td>6</td>
+      <td>14</td>
+      <td>12</td>
+      <td>14</td>
+      <td>12</td>
+      <td>63</td>
+      <td>68</td>
+      <td>71</td>
+      <td>68</td>
+      <td>62</td>
+      <td>66</td>
+      <td>71</td>
+      <td>71</td>
+      <td>76</td>
+      <td>72</td>
+      <td>69</td>
+      <td>65</td>
+      <td>84</td>
+      <td>78</td>
+      <td>66</td>
+      <td>70</td>
+      <td>71</td>
+      <td>57</td>
+      <td>73.0</td>
+      <td>68.0</td>
+      <td>70.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>196069</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>68.0</td>
+      <td>72.0</td>
+      <td>70.0</td>
+      <td>73.0</td>
+      <td>75.0</td>
+      <td>70.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>RB RW</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>68.0</td>
+      <td>72.0</td>
+      <td>70.0</td>
+      <td>73.0</td>
+      <td>75.0</td>
+      <td>70.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>70.0</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>14723</th>
+      <td>J. Lalpekhlua</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/217225.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>60</td>
+      <td>61</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1513</td>
+      <td>77</td>
+      <td>47</td>
+      <td>69</td>
+      <td>58</td>
+      <td>57</td>
+      <td>47</td>
+      <td>31</td>
+      <td>47</td>
+      <td>51</td>
+      <td>63</td>
+      <td>58</td>
+      <td>13</td>
+      <td>11</td>
+      <td>10</td>
+      <td>10</td>
+      <td>11</td>
+      <td>57</td>
+      <td>34</td>
+      <td>52</td>
+      <td>46</td>
+      <td>56</td>
+      <td>23</td>
+      <td>65</td>
+      <td>55</td>
+      <td>57</td>
+      <td>51</td>
+      <td>59</td>
+      <td>29</td>
+      <td>74</td>
+      <td>56</td>
+      <td>31</td>
+      <td>59</td>
+      <td>46</td>
+      <td>50</td>
+      <td>55.0</td>
+      <td>41.0</td>
+      <td>43.0</td>
+      <td>57.0</td>
+      <td>50.0</td>
+      <td>217225</td>
+      <td>55.0</td>
+      <td>44.0</td>
+      <td>41.0</td>
+      <td>50.0</td>
+      <td>43.0</td>
+      <td>57.0</td>
+      <td>54.0</td>
+      <td>59.0</td>
+      <td>56.0</td>
+      <td>44.0</td>
+      <td>LM ST</td>
+      <td>55.0</td>
+      <td>44.0</td>
+      <td>41.0</td>
+      <td>50.0</td>
+      <td>43.0</td>
+      <td>57.0</td>
+      <td>54.0</td>
+      <td>59.0</td>
+      <td>56.0</td>
+      <td>44.0</td>
+      <td>59.0</td>
+    </tr>
+    <tr>
+      <th>14805</th>
+      <td>B. Makendzhiev</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/231075.png</td>
+      <td>Bulgaria</td>
+      <td>https://cdn.sofifa.org/flags/9.png</td>
+      <td>60</td>
+      <td>60</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/9.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1032</td>
+      <td>42</td>
+      <td>22</td>
+      <td>34</td>
+      <td>56</td>
+      <td>16</td>
+      <td>22</td>
+      <td>10</td>
+      <td>13</td>
+      <td>16</td>
+      <td>11</td>
+      <td>10</td>
+      <td>61</td>
+      <td>54</td>
+      <td>60</td>
+      <td>69</td>
+      <td>58</td>
+      <td>18</td>
+      <td>15</td>
+      <td>55</td>
+      <td>23</td>
+      <td>14</td>
+      <td>12</td>
+      <td>29</td>
+      <td>11</td>
+      <td>48</td>
+      <td>29</td>
+      <td>18</td>
+      <td>18</td>
+      <td>48</td>
+      <td>37</td>
+      <td>18</td>
+      <td>76</td>
+      <td>19</td>
+      <td>12</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>231075</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>14817</th>
+      <td>Gao Zhunyi</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/232871.png</td>
+      <td>China PR</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>60</td>
+      <td>68</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1580</td>
+      <td>63</td>
+      <td>55</td>
+      <td>55</td>
+      <td>45</td>
+      <td>45</td>
+      <td>55</td>
+      <td>59</td>
+      <td>43</td>
+      <td>40</td>
+      <td>35</td>
+      <td>49</td>
+      <td>15</td>
+      <td>10</td>
+      <td>12</td>
+      <td>14</td>
+      <td>11</td>
+      <td>60</td>
+      <td>62</td>
+      <td>63</td>
+      <td>62</td>
+      <td>53</td>
+      <td>60</td>
+      <td>63</td>
+      <td>40</td>
+      <td>61</td>
+      <td>58</td>
+      <td>58</td>
+      <td>58</td>
+      <td>62</td>
+      <td>63</td>
+      <td>64</td>
+      <td>55</td>
+      <td>40</td>
+      <td>47</td>
+      <td>48.0</td>
+      <td>59.0</td>
+      <td>58.0</td>
+      <td>48.0</td>
+      <td>52.0</td>
+      <td>232871</td>
+      <td>48.0</td>
+      <td>60.0</td>
+      <td>59.0</td>
+      <td>52.0</td>
+      <td>58.0</td>
+      <td>48.0</td>
+      <td>51.0</td>
+      <td>49.0</td>
+      <td>49.0</td>
+      <td>59.0</td>
+      <td>CDM CB</td>
+      <td>48.0</td>
+      <td>60.0</td>
+      <td>59.0</td>
+      <td>52.0</td>
+      <td>58.0</td>
+      <td>48.0</td>
+      <td>51.0</td>
+      <td>49.0</td>
+      <td>49.0</td>
+      <td>59.0</td>
+      <td>49.0</td>
+    </tr>
+    <tr>
+      <th>14865</th>
+      <td>G. Singh Sandhu</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/225213.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>60</td>
+      <td>65</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1037</td>
+      <td>42</td>
+      <td>23</td>
+      <td>38</td>
+      <td>37</td>
+      <td>23</td>
+      <td>31</td>
+      <td>20</td>
+      <td>14</td>
+      <td>13</td>
+      <td>13</td>
+      <td>20</td>
+      <td>63</td>
+      <td>59</td>
+      <td>59</td>
+      <td>58</td>
+      <td>60</td>
+      <td>18</td>
+      <td>23</td>
+      <td>51</td>
+      <td>27</td>
+      <td>13</td>
+      <td>11</td>
+      <td>15</td>
+      <td>16</td>
+      <td>55</td>
+      <td>24</td>
+      <td>14</td>
+      <td>11</td>
+      <td>40</td>
+      <td>36</td>
+      <td>15</td>
+      <td>70</td>
+      <td>40</td>
+      <td>16</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>225213</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>14921</th>
+      <td>Deng Hanwen</td>
+      <td>22</td>
+      <td>https://cdn.sofifa.org/48/18/players/237010.png</td>
+      <td>China PR</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>60</td>
+      <td>69</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/155.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1576</td>
+      <td>68</td>
+      <td>53</td>
+      <td>67</td>
+      <td>61</td>
+      <td>60</td>
+      <td>42</td>
+      <td>63</td>
+      <td>55</td>
+      <td>66</td>
+      <td>32</td>
+      <td>33</td>
+      <td>6</td>
+      <td>10</td>
+      <td>14</td>
+      <td>12</td>
+      <td>13</td>
+      <td>44</td>
+      <td>59</td>
+      <td>55</td>
+      <td>42</td>
+      <td>65</td>
+      <td>55</td>
+      <td>38</td>
+      <td>55</td>
+      <td>65</td>
+      <td>55</td>
+      <td>61</td>
+      <td>52</td>
+      <td>66</td>
+      <td>63</td>
+      <td>62</td>
+      <td>52</td>
+      <td>52</td>
+      <td>22</td>
+      <td>57.0</td>
+      <td>56.0</td>
+      <td>56.0</td>
+      <td>57.0</td>
+      <td>56.0</td>
+      <td>237010</td>
+      <td>57.0</td>
+      <td>59.0</td>
+      <td>56.0</td>
+      <td>56.0</td>
+      <td>56.0</td>
+      <td>57.0</td>
+      <td>59.0</td>
+      <td>53.0</td>
+      <td>59.0</td>
+      <td>60.0</td>
+      <td>RB</td>
+      <td>57.0</td>
+      <td>59.0</td>
+      <td>56.0</td>
+      <td>56.0</td>
+      <td>56.0</td>
+      <td>57.0</td>
+      <td>59.0</td>
+      <td>53.0</td>
+      <td>59.0</td>
+      <td>60.0</td>
+      <td>53.0</td>
+    </tr>
+    <tr>
+      <th>15237</th>
+      <td>K. Pereira</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/228189.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>59</td>
+      <td>59</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1548</td>
+      <td>86</td>
+      <td>49</td>
+      <td>82</td>
+      <td>76</td>
+      <td>54</td>
+      <td>36</td>
+      <td>53</td>
+      <td>48</td>
+      <td>62</td>
+      <td>13</td>
+      <td>45</td>
+      <td>9</td>
+      <td>15</td>
+      <td>15</td>
+      <td>6</td>
+      <td>8</td>
+      <td>48</td>
+      <td>53</td>
+      <td>62</td>
+      <td>29</td>
+      <td>35</td>
+      <td>58</td>
+      <td>49</td>
+      <td>45</td>
+      <td>58</td>
+      <td>35</td>
+      <td>70</td>
+      <td>55</td>
+      <td>83</td>
+      <td>71</td>
+      <td>54</td>
+      <td>53</td>
+      <td>39</td>
+      <td>30</td>
+      <td>48.0</td>
+      <td>54.0</td>
+      <td>50.0</td>
+      <td>50.0</td>
+      <td>45.0</td>
+      <td>228189</td>
+      <td>48.0</td>
+      <td>58.0</td>
+      <td>54.0</td>
+      <td>45.0</td>
+      <td>50.0</td>
+      <td>50.0</td>
+      <td>53.0</td>
+      <td>48.0</td>
+      <td>52.0</td>
+      <td>58.0</td>
+      <td>LB</td>
+      <td>48.0</td>
+      <td>58.0</td>
+      <td>54.0</td>
+      <td>45.0</td>
+      <td>50.0</td>
+      <td>50.0</td>
+      <td>53.0</td>
+      <td>48.0</td>
+      <td>52.0</td>
+      <td>58.0</td>
+      <td>48.0</td>
+    </tr>
+    <tr>
+      <th>15257</th>
+      <td>J. Singh</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/228198.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>59</td>
+      <td>62</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1527</td>
+      <td>86</td>
+      <td>32</td>
+      <td>77</td>
+      <td>80</td>
+      <td>59</td>
+      <td>52</td>
+      <td>47</td>
+      <td>58</td>
+      <td>58</td>
+      <td>60</td>
+      <td>59</td>
+      <td>15</td>
+      <td>14</td>
+      <td>8</td>
+      <td>10</td>
+      <td>16</td>
+      <td>40</td>
+      <td>12</td>
+      <td>53</td>
+      <td>35</td>
+      <td>59</td>
+      <td>19</td>
+      <td>65</td>
+      <td>53</td>
+      <td>51</td>
+      <td>50</td>
+      <td>68</td>
+      <td>13</td>
+      <td>82</td>
+      <td>66</td>
+      <td>18</td>
+      <td>59</td>
+      <td>50</td>
+      <td>55</td>
+      <td>56.0</td>
+      <td>31.0</td>
+      <td>36.0</td>
+      <td>59.0</td>
+      <td>48.0</td>
+      <td>228198</td>
+      <td>56.0</td>
+      <td>40.0</td>
+      <td>31.0</td>
+      <td>48.0</td>
+      <td>36.0</td>
+      <td>59.0</td>
+      <td>57.0</td>
+      <td>58.0</td>
+      <td>59.0</td>
+      <td>42.0</td>
+      <td>RM ST</td>
+      <td>56.0</td>
+      <td>40.0</td>
+      <td>31.0</td>
+      <td>48.0</td>
+      <td>36.0</td>
+      <td>59.0</td>
+      <td>57.0</td>
+      <td>58.0</td>
+      <td>59.0</td>
+      <td>42.0</td>
+      <td>58.0</td>
+    </tr>
+    <tr>
+      <th>15330</th>
+      <td>B. Jairu</td>
+      <td>35</td>
+      <td>https://cdn.sofifa.org/48/18/players/231567.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>59</td>
+      <td>59</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1537</td>
+      <td>58</td>
+      <td>51</td>
+      <td>55</td>
+      <td>64</td>
+      <td>59</td>
+      <td>50</td>
+      <td>63</td>
+      <td>52</td>
+      <td>58</td>
+      <td>55</td>
+      <td>56</td>
+      <td>6</td>
+      <td>13</td>
+      <td>13</td>
+      <td>7</td>
+      <td>8</td>
+      <td>44</td>
+      <td>45</td>
+      <td>41</td>
+      <td>59</td>
+      <td>53</td>
+      <td>35</td>
+      <td>55</td>
+      <td>55</td>
+      <td>56</td>
+      <td>61</td>
+      <td>57</td>
+      <td>38</td>
+      <td>60</td>
+      <td>61</td>
+      <td>34</td>
+      <td>62</td>
+      <td>52</td>
+      <td>51</td>
+      <td>57.0</td>
+      <td>45.0</td>
+      <td>50.0</td>
+      <td>57.0</td>
+      <td>56.0</td>
+      <td>231567</td>
+      <td>57.0</td>
+      <td>50.0</td>
+      <td>45.0</td>
+      <td>56.0</td>
+      <td>50.0</td>
+      <td>57.0</td>
+      <td>58.0</td>
+      <td>56.0</td>
+      <td>58.0</td>
+      <td>52.0</td>
+      <td>CDM RM LM</td>
+      <td>57.0</td>
+      <td>50.0</td>
+      <td>45.0</td>
+      <td>56.0</td>
+      <td>50.0</td>
+      <td>57.0</td>
+      <td>58.0</td>
+      <td>56.0</td>
+      <td>58.0</td>
+      <td>52.0</td>
+      <td>56.0</td>
+    </tr>
+    <tr>
+      <th>15564</th>
+      <td>G. Bokwé</td>
+      <td>27</td>
+      <td>https://cdn.sofifa.org/48/18/players/237318.png</td>
+      <td>Cameroon</td>
+      <td>https://cdn.sofifa.org/flags/103.png</td>
+      <td>58</td>
+      <td>60</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/103.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>977</td>
+      <td>38</td>
+      <td>31</td>
+      <td>26</td>
+      <td>54</td>
+      <td>15</td>
+      <td>43</td>
+      <td>17</td>
+      <td>15</td>
+      <td>10</td>
+      <td>13</td>
+      <td>18</td>
+      <td>56</td>
+      <td>61</td>
+      <td>55</td>
+      <td>59</td>
+      <td>63</td>
+      <td>16</td>
+      <td>18</td>
+      <td>65</td>
+      <td>20</td>
+      <td>12</td>
+      <td>12</td>
+      <td>18</td>
+      <td>11</td>
+      <td>38</td>
+      <td>15</td>
+      <td>35</td>
+      <td>16</td>
+      <td>21</td>
+      <td>21</td>
+      <td>11</td>
+      <td>59</td>
+      <td>44</td>
+      <td>14</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>237318</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>15592</th>
+      <td>A. Khongjee</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/223762.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>58</td>
+      <td>58</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1476</td>
+      <td>64</td>
+      <td>48</td>
+      <td>57</td>
+      <td>56</td>
+      <td>49</td>
+      <td>49</td>
+      <td>54</td>
+      <td>42</td>
+      <td>43</td>
+      <td>38</td>
+      <td>39</td>
+      <td>11</td>
+      <td>12</td>
+      <td>16</td>
+      <td>8</td>
+      <td>8</td>
+      <td>51</td>
+      <td>53</td>
+      <td>50</td>
+      <td>57</td>
+      <td>36</td>
+      <td>56</td>
+      <td>42</td>
+      <td>45</td>
+      <td>52</td>
+      <td>59</td>
+      <td>38</td>
+      <td>58</td>
+      <td>66</td>
+      <td>63</td>
+      <td>57</td>
+      <td>65</td>
+      <td>42</td>
+      <td>41</td>
+      <td>49.0</td>
+      <td>56.0</td>
+      <td>55.0</td>
+      <td>48.0</td>
+      <td>51.0</td>
+      <td>223762</td>
+      <td>49.0</td>
+      <td>57.0</td>
+      <td>56.0</td>
+      <td>51.0</td>
+      <td>55.0</td>
+      <td>48.0</td>
+      <td>52.0</td>
+      <td>48.0</td>
+      <td>50.0</td>
+      <td>56.0</td>
+      <td>RM CB RB</td>
+      <td>49.0</td>
+      <td>57.0</td>
+      <td>56.0</td>
+      <td>51.0</td>
+      <td>55.0</td>
+      <td>48.0</td>
+      <td>52.0</td>
+      <td>48.0</td>
+      <td>50.0</td>
+      <td>56.0</td>
+      <td>48.0</td>
+    </tr>
+    <tr>
+      <th>15598</th>
+      <td>A. George</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/211478.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>58</td>
+      <td>60</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1352</td>
+      <td>60</td>
+      <td>33</td>
+      <td>52</td>
+      <td>57</td>
+      <td>61</td>
+      <td>47</td>
+      <td>30</td>
+      <td>37</td>
+      <td>57</td>
+      <td>48</td>
+      <td>33</td>
+      <td>15</td>
+      <td>12</td>
+      <td>7</td>
+      <td>14</td>
+      <td>9</td>
+      <td>57</td>
+      <td>19</td>
+      <td>64</td>
+      <td>60</td>
+      <td>54</td>
+      <td>16</td>
+      <td>56</td>
+      <td>52</td>
+      <td>50</td>
+      <td>65</td>
+      <td>45</td>
+      <td>11</td>
+      <td>63</td>
+      <td>58</td>
+      <td>19</td>
+      <td>41</td>
+      <td>55</td>
+      <td>42</td>
+      <td>57.0</td>
+      <td>33.0</td>
+      <td>41.0</td>
+      <td>56.0</td>
+      <td>54.0</td>
+      <td>211478</td>
+      <td>57.0</td>
+      <td>37.0</td>
+      <td>33.0</td>
+      <td>54.0</td>
+      <td>41.0</td>
+      <td>56.0</td>
+      <td>55.0</td>
+      <td>53.0</td>
+      <td>54.0</td>
+      <td>39.0</td>
+      <td>CF CAM</td>
+      <td>57.0</td>
+      <td>37.0</td>
+      <td>33.0</td>
+      <td>54.0</td>
+      <td>41.0</td>
+      <td>56.0</td>
+      <td>55.0</td>
+      <td>53.0</td>
+      <td>54.0</td>
+      <td>39.0</td>
+      <td>53.0</td>
+    </tr>
+    <tr>
+      <th>15724</th>
+      <td>A. Fernandes</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/228190.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>58</td>
+      <td>59</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1301</td>
+      <td>64</td>
+      <td>49</td>
+      <td>44</td>
+      <td>63</td>
+      <td>31</td>
+      <td>41</td>
+      <td>32</td>
+      <td>30</td>
+      <td>30</td>
+      <td>21</td>
+      <td>28</td>
+      <td>13</td>
+      <td>7</td>
+      <td>15</td>
+      <td>11</td>
+      <td>14</td>
+      <td>65</td>
+      <td>50</td>
+      <td>64</td>
+      <td>28</td>
+      <td>25</td>
+      <td>62</td>
+      <td>37</td>
+      <td>22</td>
+      <td>52</td>
+      <td>31</td>
+      <td>41</td>
+      <td>58</td>
+      <td>55</td>
+      <td>67</td>
+      <td>60</td>
+      <td>70</td>
+      <td>35</td>
+      <td>27</td>
+      <td>33.0</td>
+      <td>57.0</td>
+      <td>47.0</td>
+      <td>35.0</td>
+      <td>36.0</td>
+      <td>228190</td>
+      <td>33.0</td>
+      <td>52.0</td>
+      <td>57.0</td>
+      <td>36.0</td>
+      <td>47.0</td>
+      <td>35.0</td>
+      <td>37.0</td>
+      <td>38.0</td>
+      <td>35.0</td>
+      <td>49.0</td>
+      <td>CB</td>
+      <td>33.0</td>
+      <td>52.0</td>
+      <td>57.0</td>
+      <td>36.0</td>
+      <td>47.0</td>
+      <td>35.0</td>
+      <td>37.0</td>
+      <td>38.0</td>
+      <td>35.0</td>
+      <td>49.0</td>
+      <td>38.0</td>
+    </tr>
+    <tr>
+      <th>15738</th>
+      <td>H. Narzary</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/228199.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>58</td>
+      <td>66</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1441</td>
+      <td>80</td>
+      <td>27</td>
+      <td>71</td>
+      <td>70</td>
+      <td>48</td>
+      <td>52</td>
+      <td>50</td>
+      <td>55</td>
+      <td>49</td>
+      <td>62</td>
+      <td>61</td>
+      <td>7</td>
+      <td>12</td>
+      <td>11</td>
+      <td>13</td>
+      <td>8</td>
+      <td>52</td>
+      <td>19</td>
+      <td>48</td>
+      <td>31</td>
+      <td>52</td>
+      <td>20</td>
+      <td>66</td>
+      <td>61</td>
+      <td>53</td>
+      <td>44</td>
+      <td>53</td>
+      <td>19</td>
+      <td>77</td>
+      <td>53</td>
+      <td>21</td>
+      <td>56</td>
+      <td>47</td>
+      <td>45</td>
+      <td>52.0</td>
+      <td>33.0</td>
+      <td>34.0</td>
+      <td>55.0</td>
+      <td>44.0</td>
+      <td>228199</td>
+      <td>52.0</td>
+      <td>40.0</td>
+      <td>33.0</td>
+      <td>44.0</td>
+      <td>34.0</td>
+      <td>55.0</td>
+      <td>53.0</td>
+      <td>57.0</td>
+      <td>56.0</td>
+      <td>41.0</td>
+      <td>RM ST</td>
+      <td>52.0</td>
+      <td>40.0</td>
+      <td>33.0</td>
+      <td>44.0</td>
+      <td>34.0</td>
+      <td>55.0</td>
+      <td>53.0</td>
+      <td>57.0</td>
+      <td>56.0</td>
+      <td>41.0</td>
+      <td>57.0</td>
+    </tr>
+    <tr>
+      <th>15829</th>
+      <td>A. Mondal</td>
+      <td>27</td>
+      <td>https://cdn.sofifa.org/48/18/players/221588.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>58</td>
+      <td>60</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1450</td>
+      <td>55</td>
+      <td>55</td>
+      <td>48</td>
+      <td>55</td>
+      <td>50</td>
+      <td>48</td>
+      <td>47</td>
+      <td>30</td>
+      <td>49</td>
+      <td>39</td>
+      <td>29</td>
+      <td>13</td>
+      <td>15</td>
+      <td>15</td>
+      <td>11</td>
+      <td>10</td>
+      <td>54</td>
+      <td>49</td>
+      <td>67</td>
+      <td>52</td>
+      <td>51</td>
+      <td>56</td>
+      <td>49</td>
+      <td>24</td>
+      <td>49</td>
+      <td>61</td>
+      <td>60</td>
+      <td>61</td>
+      <td>41</td>
+      <td>58</td>
+      <td>59</td>
+      <td>75</td>
+      <td>28</td>
+      <td>35</td>
+      <td>45.0</td>
+      <td>57.0</td>
+      <td>55.0</td>
+      <td>45.0</td>
+      <td>48.0</td>
+      <td>221588</td>
+      <td>45.0</td>
+      <td>54.0</td>
+      <td>57.0</td>
+      <td>48.0</td>
+      <td>55.0</td>
+      <td>45.0</td>
+      <td>47.0</td>
+      <td>47.0</td>
+      <td>46.0</td>
+      <td>53.0</td>
+      <td>CB</td>
+      <td>45.0</td>
+      <td>54.0</td>
+      <td>57.0</td>
+      <td>48.0</td>
+      <td>55.0</td>
+      <td>45.0</td>
+      <td>47.0</td>
+      <td>47.0</td>
+      <td>46.0</td>
+      <td>53.0</td>
+      <td>47.0</td>
+    </tr>
+    <tr>
+      <th>15839</th>
+      <td>C. Lewis</td>
+      <td>20</td>
+      <td>https://cdn.sofifa.org/48/18/players/231063.png</td>
+      <td>New Zealand</td>
+      <td>https://cdn.sofifa.org/flags/198.png</td>
+      <td>58</td>
+      <td>70</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/198.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1461</td>
+      <td>80</td>
+      <td>55</td>
+      <td>76</td>
+      <td>80</td>
+      <td>58</td>
+      <td>50</td>
+      <td>55</td>
+      <td>44</td>
+      <td>62</td>
+      <td>48</td>
+      <td>38</td>
+      <td>15</td>
+      <td>12</td>
+      <td>11</td>
+      <td>6</td>
+      <td>13</td>
+      <td>29</td>
+      <td>19</td>
+      <td>55</td>
+      <td>49</td>
+      <td>51</td>
+      <td>19</td>
+      <td>58</td>
+      <td>50</td>
+      <td>47</td>
+      <td>56</td>
+      <td>62</td>
+      <td>20</td>
+      <td>77</td>
+      <td>45</td>
+      <td>30</td>
+      <td>38</td>
+      <td>55</td>
+      <td>48</td>
+      <td>57.0</td>
+      <td>33.0</td>
+      <td>40.0</td>
+      <td>56.0</td>
+      <td>50.0</td>
+      <td>231063</td>
+      <td>57.0</td>
+      <td>41.0</td>
+      <td>33.0</td>
+      <td>50.0</td>
+      <td>40.0</td>
+      <td>56.0</td>
+      <td>57.0</td>
+      <td>52.0</td>
+      <td>58.0</td>
+      <td>44.0</td>
+      <td>LW CM CAM</td>
+      <td>57.0</td>
+      <td>41.0</td>
+      <td>33.0</td>
+      <td>50.0</td>
+      <td>40.0</td>
+      <td>56.0</td>
+      <td>57.0</td>
+      <td>52.0</td>
+      <td>58.0</td>
+      <td>44.0</td>
+      <td>52.0</td>
+    </tr>
+    <tr>
+      <th>15996</th>
+      <td>R. Borges</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/231933.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>58</td>
+      <td>64</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1430</td>
+      <td>58</td>
+      <td>55</td>
+      <td>54</td>
+      <td>59</td>
+      <td>54</td>
+      <td>40</td>
+      <td>41</td>
+      <td>33</td>
+      <td>45</td>
+      <td>33</td>
+      <td>39</td>
+      <td>10</td>
+      <td>7</td>
+      <td>6</td>
+      <td>5</td>
+      <td>6</td>
+      <td>55</td>
+      <td>58</td>
+      <td>52</td>
+      <td>56</td>
+      <td>28</td>
+      <td>58</td>
+      <td>40</td>
+      <td>39</td>
+      <td>59</td>
+      <td>54</td>
+      <td>44</td>
+      <td>57</td>
+      <td>57</td>
+      <td>66</td>
+      <td>56</td>
+      <td>68</td>
+      <td>47</td>
+      <td>31</td>
+      <td>48.0</td>
+      <td>58.0</td>
+      <td>57.0</td>
+      <td>47.0</td>
+      <td>52.0</td>
+      <td>231933</td>
+      <td>48.0</td>
+      <td>56.0</td>
+      <td>58.0</td>
+      <td>52.0</td>
+      <td>57.0</td>
+      <td>47.0</td>
+      <td>50.0</td>
+      <td>47.0</td>
+      <td>47.0</td>
+      <td>55.0</td>
+      <td>CDM</td>
+      <td>48.0</td>
+      <td>56.0</td>
+      <td>58.0</td>
+      <td>52.0</td>
+      <td>57.0</td>
+      <td>47.0</td>
+      <td>50.0</td>
+      <td>47.0</td>
+      <td>47.0</td>
+      <td>55.0</td>
+      <td>47.0</td>
+    </tr>
+    <tr>
+      <th>16035</th>
+      <td>N. Das</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/223764.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>57</td>
+      <td>64</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1422</td>
+      <td>76</td>
+      <td>56</td>
+      <td>79</td>
+      <td>76</td>
+      <td>48</td>
+      <td>57</td>
+      <td>48</td>
+      <td>31</td>
+      <td>52</td>
+      <td>23</td>
+      <td>30</td>
+      <td>14</td>
+      <td>9</td>
+      <td>12</td>
+      <td>10</td>
+      <td>11</td>
+      <td>50</td>
+      <td>53</td>
+      <td>61</td>
+      <td>29</td>
+      <td>24</td>
+      <td>61</td>
+      <td>40</td>
+      <td>46</td>
+      <td>54</td>
+      <td>39</td>
+      <td>27</td>
+      <td>54</td>
+      <td>73</td>
+      <td>60</td>
+      <td>57</td>
+      <td>58</td>
+      <td>36</td>
+      <td>25</td>
+      <td>45.0</td>
+      <td>55.0</td>
+      <td>50.0</td>
+      <td>45.0</td>
+      <td>43.0</td>
+      <td>223764</td>
+      <td>45.0</td>
+      <td>56.0</td>
+      <td>55.0</td>
+      <td>43.0</td>
+      <td>50.0</td>
+      <td>45.0</td>
+      <td>49.0</td>
+      <td>43.0</td>
+      <td>48.0</td>
+      <td>54.0</td>
+      <td>LB</td>
+      <td>45.0</td>
+      <td>56.0</td>
+      <td>55.0</td>
+      <td>43.0</td>
+      <td>50.0</td>
+      <td>45.0</td>
+      <td>49.0</td>
+      <td>43.0</td>
+      <td>48.0</td>
+      <td>54.0</td>
+      <td>43.0</td>
+    </tr>
+    <tr>
+      <th>16190</th>
+      <td>T. Williams</td>
+      <td>33</td>
+      <td>https://cdn.sofifa.org/48/18/players/174202.png</td>
+      <td>New Zealand</td>
+      <td>https://cdn.sofifa.org/flags/198.png</td>
+      <td>57</td>
+      <td>57</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/198.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1025</td>
+      <td>52</td>
+      <td>34</td>
+      <td>35</td>
+      <td>55</td>
+      <td>16</td>
+      <td>28</td>
+      <td>16</td>
+      <td>20</td>
+      <td>12</td>
+      <td>13</td>
+      <td>15</td>
+      <td>57</td>
+      <td>53</td>
+      <td>63</td>
+      <td>56</td>
+      <td>60</td>
+      <td>16</td>
+      <td>9</td>
+      <td>65</td>
+      <td>16</td>
+      <td>16</td>
+      <td>10</td>
+      <td>17</td>
+      <td>5</td>
+      <td>47</td>
+      <td>28</td>
+      <td>12</td>
+      <td>13</td>
+      <td>50</td>
+      <td>29</td>
+      <td>17</td>
+      <td>61</td>
+      <td>46</td>
+      <td>11</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>174202</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>16703</th>
+      <td>D. Wynne</td>
+      <td>22</td>
+      <td>https://cdn.sofifa.org/48/18/players/226057.png</td>
+      <td>New Zealand</td>
+      <td>https://cdn.sofifa.org/flags/198.png</td>
+      <td>55</td>
+      <td>66</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/198.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1382</td>
+      <td>79</td>
+      <td>57</td>
+      <td>54</td>
+      <td>72</td>
+      <td>45</td>
+      <td>53</td>
+      <td>41</td>
+      <td>30</td>
+      <td>58</td>
+      <td>24</td>
+      <td>32</td>
+      <td>12</td>
+      <td>7</td>
+      <td>13</td>
+      <td>9</td>
+      <td>9</td>
+      <td>43</td>
+      <td>49</td>
+      <td>60</td>
+      <td>32</td>
+      <td>27</td>
+      <td>59</td>
+      <td>41</td>
+      <td>46</td>
+      <td>49</td>
+      <td>31</td>
+      <td>23</td>
+      <td>58</td>
+      <td>75</td>
+      <td>64</td>
+      <td>58</td>
+      <td>54</td>
+      <td>40</td>
+      <td>31</td>
+      <td>44.0</td>
+      <td>53.0</td>
+      <td>48.0</td>
+      <td>45.0</td>
+      <td>42.0</td>
+      <td>226057</td>
+      <td>44.0</td>
+      <td>54.0</td>
+      <td>53.0</td>
+      <td>42.0</td>
+      <td>48.0</td>
+      <td>45.0</td>
+      <td>48.0</td>
+      <td>42.0</td>
+      <td>47.0</td>
+      <td>53.0</td>
+      <td>LB</td>
+      <td>44.0</td>
+      <td>54.0</td>
+      <td>53.0</td>
+      <td>42.0</td>
+      <td>48.0</td>
+      <td>45.0</td>
+      <td>48.0</td>
+      <td>42.0</td>
+      <td>47.0</td>
+      <td>53.0</td>
+      <td>42.0</td>
+    </tr>
+    <tr>
+      <th>16707</th>
+      <td>M. Rafique</td>
+      <td>24</td>
+      <td>https://cdn.sofifa.org/48/18/players/234507.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>55</td>
+      <td>60</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1535</td>
+      <td>68</td>
+      <td>55</td>
+      <td>74</td>
+      <td>79</td>
+      <td>56</td>
+      <td>42</td>
+      <td>52</td>
+      <td>39</td>
+      <td>54</td>
+      <td>45</td>
+      <td>48</td>
+      <td>13</td>
+      <td>13</td>
+      <td>13</td>
+      <td>5</td>
+      <td>7</td>
+      <td>49</td>
+      <td>41</td>
+      <td>56</td>
+      <td>60</td>
+      <td>39</td>
+      <td>42</td>
+      <td>46</td>
+      <td>53</td>
+      <td>48</td>
+      <td>63</td>
+      <td>52</td>
+      <td>52</td>
+      <td>67</td>
+      <td>61</td>
+      <td>48</td>
+      <td>42</td>
+      <td>48</td>
+      <td>47</td>
+      <td>55.0</td>
+      <td>48.0</td>
+      <td>52.0</td>
+      <td>54.0</td>
+      <td>54.0</td>
+      <td>234507</td>
+      <td>55.0</td>
+      <td>53.0</td>
+      <td>48.0</td>
+      <td>54.0</td>
+      <td>52.0</td>
+      <td>54.0</td>
+      <td>56.0</td>
+      <td>52.0</td>
+      <td>55.0</td>
+      <td>53.0</td>
+      <td>CM</td>
+      <td>55.0</td>
+      <td>53.0</td>
+      <td>48.0</td>
+      <td>54.0</td>
+      <td>52.0</td>
+      <td>54.0</td>
+      <td>56.0</td>
+      <td>52.0</td>
+      <td>55.0</td>
+      <td>53.0</td>
+      <td>52.0</td>
+    </tr>
+    <tr>
+      <th>16815</th>
+      <td>S. Singh</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/228989.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>55</td>
+      <td>56</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1393</td>
+      <td>74</td>
+      <td>31</td>
+      <td>54</td>
+      <td>69</td>
+      <td>53</td>
+      <td>46</td>
+      <td>54</td>
+      <td>43</td>
+      <td>61</td>
+      <td>66</td>
+      <td>39</td>
+      <td>12</td>
+      <td>12</td>
+      <td>14</td>
+      <td>14</td>
+      <td>12</td>
+      <td>41</td>
+      <td>18</td>
+      <td>45</td>
+      <td>41</td>
+      <td>45</td>
+      <td>19</td>
+      <td>56</td>
+      <td>43</td>
+      <td>47</td>
+      <td>45</td>
+      <td>75</td>
+      <td>24</td>
+      <td>73</td>
+      <td>51</td>
+      <td>29</td>
+      <td>37</td>
+      <td>44</td>
+      <td>52</td>
+      <td>52.0</td>
+      <td>32.0</td>
+      <td>36.0</td>
+      <td>55.0</td>
+      <td>45.0</td>
+      <td>228989</td>
+      <td>52.0</td>
+      <td>40.0</td>
+      <td>32.0</td>
+      <td>45.0</td>
+      <td>36.0</td>
+      <td>55.0</td>
+      <td>54.0</td>
+      <td>56.0</td>
+      <td>55.0</td>
+      <td>42.0</td>
+      <td>LW RW</td>
+      <td>52.0</td>
+      <td>40.0</td>
+      <td>32.0</td>
+      <td>45.0</td>
+      <td>36.0</td>
+      <td>55.0</td>
+      <td>54.0</td>
+      <td>56.0</td>
+      <td>55.0</td>
+      <td>42.0</td>
+      <td>56.0</td>
+    </tr>
+    <tr>
+      <th>16816</th>
+      <td>A. Edathodika</td>
+      <td>30</td>
+      <td>https://cdn.sofifa.org/48/18/players/238205.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>55</td>
+      <td>55</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1304</td>
+      <td>62</td>
+      <td>48</td>
+      <td>56</td>
+      <td>57</td>
+      <td>29</td>
+      <td>49</td>
+      <td>41</td>
+      <td>28</td>
+      <td>52</td>
+      <td>22</td>
+      <td>32</td>
+      <td>14</td>
+      <td>15</td>
+      <td>14</td>
+      <td>11</td>
+      <td>7</td>
+      <td>46</td>
+      <td>50</td>
+      <td>59</td>
+      <td>22</td>
+      <td>29</td>
+      <td>53</td>
+      <td>37</td>
+      <td>39</td>
+      <td>51</td>
+      <td>25</td>
+      <td>27</td>
+      <td>68</td>
+      <td>64</td>
+      <td>58</td>
+      <td>62</td>
+      <td>67</td>
+      <td>32</td>
+      <td>27</td>
+      <td>37.0</td>
+      <td>54.0</td>
+      <td>45.0</td>
+      <td>38.0</td>
+      <td>36.0</td>
+      <td>238205</td>
+      <td>37.0</td>
+      <td>52.0</td>
+      <td>54.0</td>
+      <td>36.0</td>
+      <td>45.0</td>
+      <td>38.0</td>
+      <td>41.0</td>
+      <td>39.0</td>
+      <td>41.0</td>
+      <td>50.0</td>
+      <td>LB CB</td>
+      <td>37.0</td>
+      <td>52.0</td>
+      <td>54.0</td>
+      <td>36.0</td>
+      <td>45.0</td>
+      <td>38.0</td>
+      <td>41.0</td>
+      <td>39.0</td>
+      <td>41.0</td>
+      <td>50.0</td>
+      <td>39.0</td>
+    </tr>
+    <tr>
+      <th>17083</th>
+      <td>K. Singh</td>
+      <td>31</td>
+      <td>https://cdn.sofifa.org/48/18/players/208481.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>54</td>
+      <td>54</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1021</td>
+      <td>47</td>
+      <td>20</td>
+      <td>64</td>
+      <td>62</td>
+      <td>18</td>
+      <td>27</td>
+      <td>14</td>
+      <td>14</td>
+      <td>20</td>
+      <td>13</td>
+      <td>15</td>
+      <td>55</td>
+      <td>47</td>
+      <td>53</td>
+      <td>51</td>
+      <td>62</td>
+      <td>17</td>
+      <td>22</td>
+      <td>59</td>
+      <td>25</td>
+      <td>16</td>
+      <td>20</td>
+      <td>18</td>
+      <td>13</td>
+      <td>49</td>
+      <td>23</td>
+      <td>15</td>
+      <td>14</td>
+      <td>42</td>
+      <td>33</td>
+      <td>15</td>
+      <td>53</td>
+      <td>15</td>
+      <td>17</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>208481</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17146</th>
+      <td>D. Lalhlimpuia</td>
+      <td>19</td>
+      <td>https://cdn.sofifa.org/48/18/players/236452.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>54</td>
+      <td>67</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1259</td>
+      <td>53</td>
+      <td>33</td>
+      <td>59</td>
+      <td>59</td>
+      <td>52</td>
+      <td>46</td>
+      <td>25</td>
+      <td>33</td>
+      <td>47</td>
+      <td>65</td>
+      <td>30</td>
+      <td>7</td>
+      <td>8</td>
+      <td>12</td>
+      <td>11</td>
+      <td>11</td>
+      <td>48</td>
+      <td>18</td>
+      <td>65</td>
+      <td>31</td>
+      <td>50</td>
+      <td>15</td>
+      <td>55</td>
+      <td>48</td>
+      <td>51</td>
+      <td>38</td>
+      <td>51</td>
+      <td>13</td>
+      <td>58</td>
+      <td>50</td>
+      <td>17</td>
+      <td>58</td>
+      <td>40</td>
+      <td>48</td>
+      <td>47.0</td>
+      <td>31.0</td>
+      <td>32.0</td>
+      <td>50.0</td>
+      <td>41.0</td>
+      <td>236452</td>
+      <td>47.0</td>
+      <td>32.0</td>
+      <td>31.0</td>
+      <td>41.0</td>
+      <td>32.0</td>
+      <td>50.0</td>
+      <td>46.0</td>
+      <td>53.0</td>
+      <td>48.0</td>
+      <td>34.0</td>
+      <td>RW ST</td>
+      <td>47.0</td>
+      <td>32.0</td>
+      <td>31.0</td>
+      <td>41.0</td>
+      <td>32.0</td>
+      <td>50.0</td>
+      <td>46.0</td>
+      <td>53.0</td>
+      <td>48.0</td>
+      <td>34.0</td>
+      <td>53.0</td>
+    </tr>
+    <tr>
+      <th>17148</th>
+      <td>G. Singh</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/236453.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>54</td>
+      <td>63</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1507</td>
+      <td>67</td>
+      <td>58</td>
+      <td>63</td>
+      <td>74</td>
+      <td>54</td>
+      <td>54</td>
+      <td>53</td>
+      <td>39</td>
+      <td>53</td>
+      <td>40</td>
+      <td>42</td>
+      <td>9</td>
+      <td>14</td>
+      <td>7</td>
+      <td>10</td>
+      <td>10</td>
+      <td>42</td>
+      <td>49</td>
+      <td>54</td>
+      <td>60</td>
+      <td>37</td>
+      <td>41</td>
+      <td>47</td>
+      <td>42</td>
+      <td>58</td>
+      <td>62</td>
+      <td>48</td>
+      <td>43</td>
+      <td>69</td>
+      <td>60</td>
+      <td>53</td>
+      <td>64</td>
+      <td>43</td>
+      <td>42</td>
+      <td>52.0</td>
+      <td>51.0</td>
+      <td>54.0</td>
+      <td>51.0</td>
+      <td>53.0</td>
+      <td>236453</td>
+      <td>52.0</td>
+      <td>53.0</td>
+      <td>51.0</td>
+      <td>53.0</td>
+      <td>54.0</td>
+      <td>51.0</td>
+      <td>55.0</td>
+      <td>50.0</td>
+      <td>53.0</td>
+      <td>54.0</td>
+      <td>CM</td>
+      <td>52.0</td>
+      <td>53.0</td>
+      <td>51.0</td>
+      <td>53.0</td>
+      <td>54.0</td>
+      <td>51.0</td>
+      <td>55.0</td>
+      <td>50.0</td>
+      <td>53.0</td>
+      <td>54.0</td>
+      <td>50.0</td>
+    </tr>
+    <tr>
+      <th>17253</th>
+      <td>F. Cardozo</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/234509.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>53</td>
+      <td>53</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1211</td>
+      <td>60</td>
+      <td>48</td>
+      <td>48</td>
+      <td>60</td>
+      <td>28</td>
+      <td>41</td>
+      <td>24</td>
+      <td>29</td>
+      <td>29</td>
+      <td>24</td>
+      <td>23</td>
+      <td>5</td>
+      <td>9</td>
+      <td>7</td>
+      <td>6</td>
+      <td>13</td>
+      <td>43</td>
+      <td>54</td>
+      <td>69</td>
+      <td>27</td>
+      <td>24</td>
+      <td>51</td>
+      <td>39</td>
+      <td>28</td>
+      <td>47</td>
+      <td>30</td>
+      <td>38</td>
+      <td>54</td>
+      <td>64</td>
+      <td>62</td>
+      <td>61</td>
+      <td>58</td>
+      <td>26</td>
+      <td>23</td>
+      <td>32.0</td>
+      <td>52.0</td>
+      <td>45.0</td>
+      <td>33.0</td>
+      <td>34.0</td>
+      <td>234509</td>
+      <td>32.0</td>
+      <td>49.0</td>
+      <td>52.0</td>
+      <td>34.0</td>
+      <td>45.0</td>
+      <td>33.0</td>
+      <td>35.0</td>
+      <td>36.0</td>
+      <td>34.0</td>
+      <td>46.0</td>
+      <td>CB</td>
+      <td>32.0</td>
+      <td>49.0</td>
+      <td>52.0</td>
+      <td>34.0</td>
+      <td>45.0</td>
+      <td>33.0</td>
+      <td>35.0</td>
+      <td>36.0</td>
+      <td>34.0</td>
+      <td>46.0</td>
+      <td>36.0</td>
+    </tr>
+    <tr>
+      <th>17467</th>
+      <td>C. Singh</td>
+      <td>20</td>
+      <td>https://cdn.sofifa.org/48/18/players/234508.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>52</td>
+      <td>61</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1237</td>
+      <td>71</td>
+      <td>44</td>
+      <td>62</td>
+      <td>48</td>
+      <td>29</td>
+      <td>41</td>
+      <td>22</td>
+      <td>21</td>
+      <td>38</td>
+      <td>21</td>
+      <td>27</td>
+      <td>12</td>
+      <td>9</td>
+      <td>6</td>
+      <td>14</td>
+      <td>8</td>
+      <td>48</td>
+      <td>48</td>
+      <td>71</td>
+      <td>30</td>
+      <td>22</td>
+      <td>46</td>
+      <td>38</td>
+      <td>26</td>
+      <td>48</td>
+      <td>36</td>
+      <td>31</td>
+      <td>53</td>
+      <td>73</td>
+      <td>58</td>
+      <td>49</td>
+      <td>76</td>
+      <td>32</td>
+      <td>20</td>
+      <td>36.0</td>
+      <td>51.0</td>
+      <td>44.0</td>
+      <td>36.0</td>
+      <td>36.0</td>
+      <td>234508</td>
+      <td>36.0</td>
+      <td>48.0</td>
+      <td>51.0</td>
+      <td>36.0</td>
+      <td>44.0</td>
+      <td>36.0</td>
+      <td>38.0</td>
+      <td>38.0</td>
+      <td>37.0</td>
+      <td>46.0</td>
+      <td>CB</td>
+      <td>36.0</td>
+      <td>48.0</td>
+      <td>51.0</td>
+      <td>36.0</td>
+      <td>44.0</td>
+      <td>36.0</td>
+      <td>38.0</td>
+      <td>38.0</td>
+      <td>37.0</td>
+      <td>46.0</td>
+      <td>38.0</td>
+    </tr>
+    <tr>
+      <th>17470</th>
+      <td>A. Singh</td>
+      <td>24</td>
+      <td>https://cdn.sofifa.org/48/18/players/223760.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>52</td>
+      <td>56</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1040</td>
+      <td>44</td>
+      <td>21</td>
+      <td>30</td>
+      <td>53</td>
+      <td>27</td>
+      <td>22</td>
+      <td>18</td>
+      <td>20</td>
+      <td>14</td>
+      <td>18</td>
+      <td>17</td>
+      <td>52</td>
+      <td>53</td>
+      <td>54</td>
+      <td>43</td>
+      <td>54</td>
+      <td>15</td>
+      <td>19</td>
+      <td>54</td>
+      <td>22</td>
+      <td>20</td>
+      <td>17</td>
+      <td>30</td>
+      <td>12</td>
+      <td>51</td>
+      <td>30</td>
+      <td>21</td>
+      <td>17</td>
+      <td>43</td>
+      <td>30</td>
+      <td>17</td>
+      <td>67</td>
+      <td>36</td>
+      <td>21</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>223760</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>17492</th>
+      <td>S. Passi</td>
+      <td>22</td>
+      <td>https://cdn.sofifa.org/48/18/players/233526.png</td>
+      <td>India</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>52</td>
+      <td>61</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/159.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1321</td>
+      <td>66</td>
+      <td>39</td>
+      <td>57</td>
+      <td>58</td>
+      <td>43</td>
+      <td>45</td>
+      <td>35</td>
+      <td>37</td>
+      <td>53</td>
+      <td>56</td>
+      <td>33</td>
+      <td>8</td>
+      <td>6</td>
+      <td>13</td>
+      <td>9</td>
+      <td>10</td>
+      <td>49</td>
+      <td>34</td>
+      <td>55</td>
+      <td>33</td>
+      <td>47</td>
+      <td>24</td>
+      <td>58</td>
+      <td>47</td>
+      <td>49</td>
+      <td>38</td>
+      <td>50</td>
+      <td>21</td>
+      <td>68</td>
+      <td>59</td>
+      <td>23</td>
+      <td>62</td>
+      <td>43</td>
+      <td>38</td>
+      <td>47.0</td>
+      <td>37.0</td>
+      <td>37.0</td>
+      <td>49.0</td>
+      <td>42.0</td>
+      <td>233526</td>
+      <td>47.0</td>
+      <td>39.0</td>
+      <td>37.0</td>
+      <td>42.0</td>
+      <td>37.0</td>
+      <td>49.0</td>
+      <td>48.0</td>
+      <td>51.0</td>
+      <td>49.0</td>
+      <td>40.0</td>
+      <td>ST</td>
+      <td>47.0</td>
+      <td>39.0</td>
+      <td>37.0</td>
+      <td>42.0</td>
+      <td>37.0</td>
+      <td>49.0</td>
+      <td>48.0</td>
+      <td>51.0</td>
+      <td>49.0</td>
+      <td>40.0</td>
+      <td>51.0</td>
+    </tr>
+    <tr>
+      <th>17553</th>
+      <td>S. Brotherton</td>
+      <td>20</td>
+      <td>https://cdn.sofifa.org/48/18/players/231057.png</td>
+      <td>New Zealand</td>
+      <td>https://cdn.sofifa.org/flags/198.png</td>
+      <td>52</td>
+      <td>65</td>
+      <td>None</td>
+      <td>https://cdn.sofifa.org/flags/198.png</td>
+      <td>€0</td>
+      <td>€0</td>
+      <td>1177</td>
+      <td>54</td>
+      <td>37</td>
+      <td>38</td>
+      <td>36</td>
+      <td>37</td>
+      <td>28</td>
+      <td>29</td>
+      <td>29</td>
+      <td>29</td>
+      <td>21</td>
+      <td>40</td>
+      <td>10</td>
+      <td>6</td>
+      <td>7</td>
+      <td>5</td>
+      <td>10</td>
+      <td>52</td>
+      <td>48</td>
+      <td>55</td>
+      <td>33</td>
+      <td>31</td>
+      <td>52</td>
+      <td>42</td>
+      <td>23</td>
+      <td>37</td>
+      <td>36</td>
+      <td>33</td>
+      <td>55</td>
+      <td>62</td>
+      <td>51</td>
+      <td>53</td>
+      <td>74</td>
+      <td>28</td>
+      <td>24</td>
+      <td>33.0</td>
+      <td>51.0</td>
+      <td>44.0</td>
+      <td>33.0</td>
+      <td>35.0</td>
+      <td>231057</td>
+      <td>33.0</td>
+      <td>47.0</td>
+      <td>51.0</td>
+      <td>35.0</td>
+      <td>44.0</td>
+      <td>33.0</td>
+      <td>35.0</td>
+      <td>36.0</td>
+      <td>34.0</td>
+      <td>45.0</td>
+      <td>CB</td>
+      <td>33.0</td>
+      <td>47.0</td>
+      <td>51.0</td>
+      <td>35.0</td>
+      <td>44.0</td>
+      <td>33.0</td>
+      <td>35.0</td>
+      <td>36.0</td>
+      <td>34.0</td>
+      <td>45.0</td>
+      <td>36.0</td>
+    </tr>
+  </tbody>
+</table>
+<p>248 rows × 74 columns</p>
+</div>
+
+
+
+Estos jugadores adicionalmente tienen un valor de 0€
+
+### Duplicates
+
+Theere are some players with the same name:
+
+* Total values:  17.981
+* Unique values: 16.975
+
+Find duplicate rows in our data, based on all column values
+
+
+```python
+df_players[df_players.duplicated(keep=False)].sort_values(by=['Name'])
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Name</th>
+      <th>Age</th>
+      <th>Photo</th>
+      <th>Nationality</th>
+      <th>Flag</th>
+      <th>Overall</th>
+      <th>Potential</th>
+      <th>Club</th>
+      <th>Club Logo</th>
+      <th>Value</th>
+      <th>Wage</th>
+      <th>Special</th>
+      <th>Acceleration</th>
+      <th>Aggression</th>
+      <th>Agility</th>
+      <th>Balance</th>
+      <th>Ball control</th>
+      <th>Composure</th>
+      <th>Crossing</th>
+      <th>Curve</th>
+      <th>Dribbling</th>
+      <th>Finishing</th>
+      <th>Free kick accuracy</th>
+      <th>GK diving</th>
+      <th>GK handling</th>
+      <th>GK kicking</th>
+      <th>GK positioning</th>
+      <th>GK reflexes</th>
+      <th>Heading accuracy</th>
+      <th>Interceptions</th>
+      <th>Jumping</th>
+      <th>Long passing</th>
+      <th>Long shots</th>
+      <th>Marking</th>
+      <th>Penalties</th>
+      <th>Positioning</th>
+      <th>Reactions</th>
+      <th>Short passing</th>
+      <th>Shot power</th>
+      <th>Sliding tackle</th>
+      <th>Sprint speed</th>
+      <th>Stamina</th>
+      <th>Standing tackle</th>
+      <th>Strength</th>
+      <th>Vision</th>
+      <th>Volleys</th>
+      <th>CAM</th>
+      <th>CB</th>
+      <th>CDM</th>
+      <th>CF</th>
+      <th>CM</th>
+      <th>ID</th>
+      <th>LAM</th>
+      <th>LB</th>
+      <th>LCB</th>
+      <th>LCM</th>
+      <th>LDM</th>
+      <th>LF</th>
+      <th>LM</th>
+      <th>LS</th>
+      <th>LW</th>
+      <th>LWB</th>
+      <th>Preferred Positions</th>
+      <th>RAM</th>
+      <th>RB</th>
+      <th>RCB</th>
+      <th>RCM</th>
+      <th>RDM</th>
+      <th>RF</th>
+      <th>RM</th>
+      <th>RS</th>
+      <th>RW</th>
+      <th>RWB</th>
+      <th>ST</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>775</th>
+      <td>A. Mandi</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/201143.png</td>
+      <td>Algeria</td>
+      <td>https://cdn.sofifa.org/flags/97.png</td>
+      <td>78</td>
+      <td>83</td>
+      <td>Real Betis Balompié</td>
+      <td>https://cdn.sofifa.org/24/18/teams/449.png</td>
+      <td>€11.5M</td>
+      <td>€23K</td>
+      <td>1938</td>
+      <td>66</td>
+      <td>69</td>
+      <td>78</td>
+      <td>64</td>
+      <td>73</td>
+      <td>74</td>
+      <td>78</td>
+      <td>67</td>
+      <td>64</td>
+      <td>41</td>
+      <td>49</td>
+      <td>15</td>
+      <td>16</td>
+      <td>9</td>
+      <td>10</td>
+      <td>14</td>
+      <td>83</td>
+      <td>80</td>
+      <td>82</td>
+      <td>73</td>
+      <td>49</td>
+      <td>75</td>
+      <td>35</td>
+      <td>67</td>
+      <td>76</td>
+      <td>76</td>
+      <td>52</td>
+      <td>84</td>
+      <td>69</td>
+      <td>70</td>
+      <td>76</td>
+      <td>74</td>
+      <td>68</td>
+      <td>36</td>
+      <td>68.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>65.0</td>
+      <td>71.0</td>
+      <td>201143</td>
+      <td>68.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>75.0</td>
+      <td>65.0</td>
+      <td>69.0</td>
+      <td>63.0</td>
+      <td>67.0</td>
+      <td>75.0</td>
+      <td>CB</td>
+      <td>68.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>75.0</td>
+      <td>65.0</td>
+      <td>69.0</td>
+      <td>63.0</td>
+      <td>67.0</td>
+      <td>75.0</td>
+      <td>63.0</td>
+    </tr>
+    <tr>
+      <th>862</th>
+      <td>A. Mandi</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/201143.png</td>
+      <td>Algeria</td>
+      <td>https://cdn.sofifa.org/flags/97.png</td>
+      <td>78</td>
+      <td>83</td>
+      <td>Real Betis Balompié</td>
+      <td>https://cdn.sofifa.org/24/18/teams/449.png</td>
+      <td>€11.5M</td>
+      <td>€23K</td>
+      <td>1938</td>
+      <td>66</td>
+      <td>69</td>
+      <td>78</td>
+      <td>64</td>
+      <td>73</td>
+      <td>74</td>
+      <td>78</td>
+      <td>67</td>
+      <td>64</td>
+      <td>41</td>
+      <td>49</td>
+      <td>15</td>
+      <td>16</td>
+      <td>9</td>
+      <td>10</td>
+      <td>14</td>
+      <td>83</td>
+      <td>80</td>
+      <td>82</td>
+      <td>73</td>
+      <td>49</td>
+      <td>75</td>
+      <td>35</td>
+      <td>67</td>
+      <td>76</td>
+      <td>76</td>
+      <td>52</td>
+      <td>84</td>
+      <td>69</td>
+      <td>70</td>
+      <td>76</td>
+      <td>74</td>
+      <td>68</td>
+      <td>36</td>
+      <td>68.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>65.0</td>
+      <td>71.0</td>
+      <td>201143</td>
+      <td>68.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>75.0</td>
+      <td>65.0</td>
+      <td>69.0</td>
+      <td>63.0</td>
+      <td>67.0</td>
+      <td>75.0</td>
+      <td>CB</td>
+      <td>68.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>75.0</td>
+      <td>65.0</td>
+      <td>69.0</td>
+      <td>63.0</td>
+      <td>67.0</td>
+      <td>75.0</td>
+      <td>63.0</td>
+    </tr>
+    <tr>
+      <th>777</th>
+      <td>A. Marchesín</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/201095.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>78</td>
+      <td>79</td>
+      <td>Club América</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1879.png</td>
+      <td>€8M</td>
+      <td>€45K</td>
+      <td>1270</td>
+      <td>49</td>
+      <td>27</td>
+      <td>68</td>
+      <td>60</td>
+      <td>20</td>
+      <td>49</td>
+      <td>18</td>
+      <td>16</td>
+      <td>24</td>
+      <td>14</td>
+      <td>15</td>
+      <td>73</td>
+      <td>75</td>
+      <td>74</td>
+      <td>80</td>
+      <td>81</td>
+      <td>11</td>
+      <td>15</td>
+      <td>75</td>
+      <td>34</td>
+      <td>12</td>
+      <td>14</td>
+      <td>14</td>
+      <td>18</td>
+      <td>75</td>
+      <td>37</td>
+      <td>12</td>
+      <td>15</td>
+      <td>52</td>
+      <td>38</td>
+      <td>15</td>
+      <td>59</td>
+      <td>65</td>
+      <td>15</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>201095</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>820</th>
+      <td>A. Marchesín</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/201095.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>78</td>
+      <td>79</td>
+      <td>Club América</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1879.png</td>
+      <td>€8M</td>
+      <td>€45K</td>
+      <td>1270</td>
+      <td>49</td>
+      <td>27</td>
+      <td>68</td>
+      <td>60</td>
+      <td>20</td>
+      <td>49</td>
+      <td>18</td>
+      <td>16</td>
+      <td>24</td>
+      <td>14</td>
+      <td>15</td>
+      <td>73</td>
+      <td>75</td>
+      <td>74</td>
+      <td>80</td>
+      <td>81</td>
+      <td>11</td>
+      <td>15</td>
+      <td>75</td>
+      <td>34</td>
+      <td>12</td>
+      <td>14</td>
+      <td>14</td>
+      <td>18</td>
+      <td>75</td>
+      <td>37</td>
+      <td>12</td>
+      <td>15</td>
+      <td>52</td>
+      <td>38</td>
+      <td>15</td>
+      <td>59</td>
+      <td>65</td>
+      <td>15</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>201095</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>872</th>
+      <td>A. Onana</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/226753.png</td>
+      <td>Cameroon</td>
+      <td>https://cdn.sofifa.org/flags/103.png</td>
+      <td>78</td>
+      <td>85</td>
+      <td>Ajax</td>
+      <td>https://cdn.sofifa.org/24/18/teams/245.png</td>
+      <td>€11M</td>
+      <td>€8K</td>
+      <td>1352</td>
+      <td>64</td>
+      <td>23</td>
+      <td>68</td>
+      <td>53</td>
+      <td>38</td>
+      <td>33</td>
+      <td>15</td>
+      <td>30</td>
+      <td>26</td>
+      <td>12</td>
+      <td>17</td>
+      <td>83</td>
+      <td>77</td>
+      <td>84</td>
+      <td>70</td>
+      <td>77</td>
+      <td>20</td>
+      <td>15</td>
+      <td>80</td>
+      <td>26</td>
+      <td>17</td>
+      <td>16</td>
+      <td>27</td>
+      <td>11</td>
+      <td>76</td>
+      <td>33</td>
+      <td>21</td>
+      <td>14</td>
+      <td>62</td>
+      <td>39</td>
+      <td>18</td>
+      <td>67</td>
+      <td>60</td>
+      <td>13</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>226753</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>700</th>
+      <td>A. Onana</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/226753.png</td>
+      <td>Cameroon</td>
+      <td>https://cdn.sofifa.org/flags/103.png</td>
+      <td>78</td>
+      <td>85</td>
+      <td>Ajax</td>
+      <td>https://cdn.sofifa.org/24/18/teams/245.png</td>
+      <td>€11M</td>
+      <td>€8K</td>
+      <td>1352</td>
+      <td>64</td>
+      <td>23</td>
+      <td>68</td>
+      <td>53</td>
+      <td>38</td>
+      <td>33</td>
+      <td>15</td>
+      <td>30</td>
+      <td>26</td>
+      <td>12</td>
+      <td>17</td>
+      <td>83</td>
+      <td>77</td>
+      <td>84</td>
+      <td>70</td>
+      <td>77</td>
+      <td>20</td>
+      <td>15</td>
+      <td>80</td>
+      <td>26</td>
+      <td>17</td>
+      <td>16</td>
+      <td>27</td>
+      <td>11</td>
+      <td>76</td>
+      <td>33</td>
+      <td>21</td>
+      <td>14</td>
+      <td>62</td>
+      <td>39</td>
+      <td>18</td>
+      <td>67</td>
+      <td>60</td>
+      <td>13</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>226753</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>736</th>
+      <td>A. Szymanowski</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/210333.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>78</td>
+      <td>78</td>
+      <td>CD Leganés</td>
+      <td>https://cdn.sofifa.org/24/18/teams/100888.png</td>
+      <td>€10.5M</td>
+      <td>€29K</td>
+      <td>1920</td>
+      <td>91</td>
+      <td>55</td>
+      <td>84</td>
+      <td>87</td>
+      <td>74</td>
+      <td>71</td>
+      <td>78</td>
+      <td>69</td>
+      <td>78</td>
+      <td>77</td>
+      <td>57</td>
+      <td>11</td>
+      <td>8</td>
+      <td>10</td>
+      <td>12</td>
+      <td>6</td>
+      <td>67</td>
+      <td>28</td>
+      <td>56</td>
+      <td>63</td>
+      <td>68</td>
+      <td>33</td>
+      <td>70</td>
+      <td>75</td>
+      <td>72</td>
+      <td>74</td>
+      <td>68</td>
+      <td>45</td>
+      <td>86</td>
+      <td>74</td>
+      <td>42</td>
+      <td>60</td>
+      <td>76</td>
+      <td>66</td>
+      <td>76.0</td>
+      <td>50.0</td>
+      <td>56.0</td>
+      <td>76.0</td>
+      <td>69.0</td>
+      <td>210333</td>
+      <td>76.0</td>
+      <td>59.0</td>
+      <td>50.0</td>
+      <td>69.0</td>
+      <td>56.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>62.0</td>
+      <td>LW CM LM</td>
+      <td>76.0</td>
+      <td>59.0</td>
+      <td>50.0</td>
+      <td>69.0</td>
+      <td>56.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>62.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>837</th>
+      <td>A. Szymanowski</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/210333.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>78</td>
+      <td>78</td>
+      <td>CD Leganés</td>
+      <td>https://cdn.sofifa.org/24/18/teams/100888.png</td>
+      <td>€10.5M</td>
+      <td>€29K</td>
+      <td>1920</td>
+      <td>91</td>
+      <td>55</td>
+      <td>84</td>
+      <td>87</td>
+      <td>74</td>
+      <td>71</td>
+      <td>78</td>
+      <td>69</td>
+      <td>78</td>
+      <td>77</td>
+      <td>57</td>
+      <td>11</td>
+      <td>8</td>
+      <td>10</td>
+      <td>12</td>
+      <td>6</td>
+      <td>67</td>
+      <td>28</td>
+      <td>56</td>
+      <td>63</td>
+      <td>68</td>
+      <td>33</td>
+      <td>70</td>
+      <td>75</td>
+      <td>72</td>
+      <td>74</td>
+      <td>68</td>
+      <td>45</td>
+      <td>86</td>
+      <td>74</td>
+      <td>42</td>
+      <td>60</td>
+      <td>76</td>
+      <td>66</td>
+      <td>76.0</td>
+      <td>50.0</td>
+      <td>56.0</td>
+      <td>76.0</td>
+      <td>69.0</td>
+      <td>210333</td>
+      <td>76.0</td>
+      <td>59.0</td>
+      <td>50.0</td>
+      <td>69.0</td>
+      <td>56.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>62.0</td>
+      <td>LW CM LM</td>
+      <td>76.0</td>
+      <td>59.0</td>
+      <td>50.0</td>
+      <td>69.0</td>
+      <td>56.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>62.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>784</th>
+      <td>André André</td>
+      <td>27</td>
+      <td>https://cdn.sofifa.org/48/18/players/199626.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>78</td>
+      <td>78</td>
+      <td>FC Porto</td>
+      <td>https://cdn.sofifa.org/24/18/teams/236.png</td>
+      <td>€10.5M</td>
+      <td>€16K</td>
+      <td>2079</td>
+      <td>73</td>
+      <td>77</td>
+      <td>74</td>
+      <td>74</td>
+      <td>80</td>
+      <td>80</td>
+      <td>65</td>
+      <td>78</td>
+      <td>79</td>
+      <td>69</td>
+      <td>61</td>
+      <td>9</td>
+      <td>11</td>
+      <td>15</td>
+      <td>9</td>
+      <td>7</td>
+      <td>64</td>
+      <td>77</td>
+      <td>70</td>
+      <td>78</td>
+      <td>71</td>
+      <td>62</td>
+      <td>84</td>
+      <td>77</td>
+      <td>76</td>
+      <td>80</td>
+      <td>75</td>
+      <td>65</td>
+      <td>69</td>
+      <td>75</td>
+      <td>75</td>
+      <td>61</td>
+      <td>75</td>
+      <td>64</td>
+      <td>77.0</td>
+      <td>70.0</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>199626</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>70.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>CM</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>70.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+    </tr>
+    <tr>
+      <th>875</th>
+      <td>André André</td>
+      <td>27</td>
+      <td>https://cdn.sofifa.org/48/18/players/199626.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>78</td>
+      <td>78</td>
+      <td>FC Porto</td>
+      <td>https://cdn.sofifa.org/24/18/teams/236.png</td>
+      <td>€10.5M</td>
+      <td>€16K</td>
+      <td>2079</td>
+      <td>73</td>
+      <td>77</td>
+      <td>74</td>
+      <td>74</td>
+      <td>80</td>
+      <td>80</td>
+      <td>65</td>
+      <td>78</td>
+      <td>79</td>
+      <td>69</td>
+      <td>61</td>
+      <td>9</td>
+      <td>11</td>
+      <td>15</td>
+      <td>9</td>
+      <td>7</td>
+      <td>64</td>
+      <td>77</td>
+      <td>70</td>
+      <td>78</td>
+      <td>71</td>
+      <td>62</td>
+      <td>84</td>
+      <td>77</td>
+      <td>76</td>
+      <td>80</td>
+      <td>75</td>
+      <td>65</td>
+      <td>69</td>
+      <td>75</td>
+      <td>75</td>
+      <td>61</td>
+      <td>75</td>
+      <td>64</td>
+      <td>77.0</td>
+      <td>70.0</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>199626</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>70.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>CM</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>70.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+    </tr>
+    <tr>
+      <th>881</th>
+      <td>B. Reynet</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/204240.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>78</td>
+      <td>80</td>
+      <td>Dijon FCO</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110569.png</td>
+      <td>€8.5M</td>
+      <td>€17K</td>
+      <td>1131</td>
+      <td>41</td>
+      <td>36</td>
+      <td>43</td>
+      <td>24</td>
+      <td>21</td>
+      <td>39</td>
+      <td>15</td>
+      <td>10</td>
+      <td>11</td>
+      <td>17</td>
+      <td>14</td>
+      <td>77</td>
+      <td>76</td>
+      <td>74</td>
+      <td>77</td>
+      <td>81</td>
+      <td>14</td>
+      <td>16</td>
+      <td>62</td>
+      <td>32</td>
+      <td>15</td>
+      <td>14</td>
+      <td>19</td>
+      <td>12</td>
+      <td>75</td>
+      <td>33</td>
+      <td>18</td>
+      <td>10</td>
+      <td>45</td>
+      <td>34</td>
+      <td>12</td>
+      <td>68</td>
+      <td>16</td>
+      <td>19</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>204240</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>759</th>
+      <td>B. Reynet</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/204240.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>78</td>
+      <td>80</td>
+      <td>Dijon FCO</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110569.png</td>
+      <td>€8.5M</td>
+      <td>€17K</td>
+      <td>1131</td>
+      <td>41</td>
+      <td>36</td>
+      <td>43</td>
+      <td>24</td>
+      <td>21</td>
+      <td>39</td>
+      <td>15</td>
+      <td>10</td>
+      <td>11</td>
+      <td>17</td>
+      <td>14</td>
+      <td>77</td>
+      <td>76</td>
+      <td>74</td>
+      <td>77</td>
+      <td>81</td>
+      <td>14</td>
+      <td>16</td>
+      <td>62</td>
+      <td>32</td>
+      <td>15</td>
+      <td>14</td>
+      <td>19</td>
+      <td>12</td>
+      <td>75</td>
+      <td>33</td>
+      <td>18</td>
+      <td>10</td>
+      <td>45</td>
+      <td>34</td>
+      <td>12</td>
+      <td>68</td>
+      <td>16</td>
+      <td>19</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>204240</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>749</th>
+      <td>Bigas</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/206222.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>81</td>
+      <td>UD Las Palmas</td>
+      <td>https://cdn.sofifa.org/24/18/teams/472.png</td>
+      <td>€11M</td>
+      <td>€22K</td>
+      <td>1859</td>
+      <td>71</td>
+      <td>89</td>
+      <td>65</td>
+      <td>66</td>
+      <td>66</td>
+      <td>70</td>
+      <td>68</td>
+      <td>46</td>
+      <td>44</td>
+      <td>49</td>
+      <td>43</td>
+      <td>15</td>
+      <td>14</td>
+      <td>9</td>
+      <td>13</td>
+      <td>11</td>
+      <td>80</td>
+      <td>78</td>
+      <td>77</td>
+      <td>60</td>
+      <td>47</td>
+      <td>78</td>
+      <td>48</td>
+      <td>61</td>
+      <td>71</td>
+      <td>74</td>
+      <td>62</td>
+      <td>78</td>
+      <td>73</td>
+      <td>77</td>
+      <td>77</td>
+      <td>70</td>
+      <td>35</td>
+      <td>44</td>
+      <td>58.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>59.0</td>
+      <td>62.0</td>
+      <td>206222</td>
+      <td>58.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>62.0</td>
+      <td>72.0</td>
+      <td>59.0</td>
+      <td>62.0</td>
+      <td>62.0</td>
+      <td>60.0</td>
+      <td>73.0</td>
+      <td>CB</td>
+      <td>58.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>62.0</td>
+      <td>72.0</td>
+      <td>59.0</td>
+      <td>62.0</td>
+      <td>62.0</td>
+      <td>60.0</td>
+      <td>73.0</td>
+      <td>62.0</td>
+    </tr>
+    <tr>
+      <th>826</th>
+      <td>Bigas</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/206222.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>81</td>
+      <td>UD Las Palmas</td>
+      <td>https://cdn.sofifa.org/24/18/teams/472.png</td>
+      <td>€11M</td>
+      <td>€22K</td>
+      <td>1859</td>
+      <td>71</td>
+      <td>89</td>
+      <td>65</td>
+      <td>66</td>
+      <td>66</td>
+      <td>70</td>
+      <td>68</td>
+      <td>46</td>
+      <td>44</td>
+      <td>49</td>
+      <td>43</td>
+      <td>15</td>
+      <td>14</td>
+      <td>9</td>
+      <td>13</td>
+      <td>11</td>
+      <td>80</td>
+      <td>78</td>
+      <td>77</td>
+      <td>60</td>
+      <td>47</td>
+      <td>78</td>
+      <td>48</td>
+      <td>61</td>
+      <td>71</td>
+      <td>74</td>
+      <td>62</td>
+      <td>78</td>
+      <td>73</td>
+      <td>77</td>
+      <td>77</td>
+      <td>70</td>
+      <td>35</td>
+      <td>44</td>
+      <td>58.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>59.0</td>
+      <td>62.0</td>
+      <td>206222</td>
+      <td>58.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>62.0</td>
+      <td>72.0</td>
+      <td>59.0</td>
+      <td>62.0</td>
+      <td>62.0</td>
+      <td>60.0</td>
+      <td>73.0</td>
+      <td>CB</td>
+      <td>58.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>62.0</td>
+      <td>72.0</td>
+      <td>59.0</td>
+      <td>62.0</td>
+      <td>62.0</td>
+      <td>60.0</td>
+      <td>73.0</td>
+      <td>62.0</td>
+    </tr>
+    <tr>
+      <th>904</th>
+      <td>Bruno Fernandes</td>
+      <td>22</td>
+      <td>https://cdn.sofifa.org/48/18/players/212198.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>78</td>
+      <td>85</td>
+      <td>Sporting CP</td>
+      <td>https://cdn.sofifa.org/24/18/teams/237.png</td>
+      <td>€14.5M</td>
+      <td>€16K</td>
+      <td>2115</td>
+      <td>79</td>
+      <td>62</td>
+      <td>82</td>
+      <td>79</td>
+      <td>81</td>
+      <td>80</td>
+      <td>76</td>
+      <td>81</td>
+      <td>79</td>
+      <td>65</td>
+      <td>76</td>
+      <td>12</td>
+      <td>14</td>
+      <td>15</td>
+      <td>8</td>
+      <td>14</td>
+      <td>58</td>
+      <td>68</td>
+      <td>72</td>
+      <td>77</td>
+      <td>79+3</td>
+      <td>58</td>
+      <td>66</td>
+      <td>75</td>
+      <td>75</td>
+      <td>78</td>
+      <td>83+3</td>
+      <td>62</td>
+      <td>78</td>
+      <td>76</td>
+      <td>66</td>
+      <td>69</td>
+      <td>74</td>
+      <td>78</td>
+      <td>77.0</td>
+      <td>66.0</td>
+      <td>71.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>212198</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>66.0</td>
+      <td>76.0</td>
+      <td>71.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>CM CF CAM</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>66.0</td>
+      <td>76.0</td>
+      <td>71.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>731</th>
+      <td>Bruno Fernandes</td>
+      <td>22</td>
+      <td>https://cdn.sofifa.org/48/18/players/212198.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>78</td>
+      <td>85</td>
+      <td>Sporting CP</td>
+      <td>https://cdn.sofifa.org/24/18/teams/237.png</td>
+      <td>€14.5M</td>
+      <td>€16K</td>
+      <td>2115</td>
+      <td>79</td>
+      <td>62</td>
+      <td>82</td>
+      <td>79</td>
+      <td>81</td>
+      <td>80</td>
+      <td>76</td>
+      <td>81</td>
+      <td>79</td>
+      <td>65</td>
+      <td>76</td>
+      <td>12</td>
+      <td>14</td>
+      <td>15</td>
+      <td>8</td>
+      <td>14</td>
+      <td>58</td>
+      <td>68</td>
+      <td>72</td>
+      <td>77</td>
+      <td>79+3</td>
+      <td>58</td>
+      <td>66</td>
+      <td>75</td>
+      <td>75</td>
+      <td>78</td>
+      <td>83+3</td>
+      <td>62</td>
+      <td>78</td>
+      <td>76</td>
+      <td>66</td>
+      <td>69</td>
+      <td>74</td>
+      <td>78</td>
+      <td>77.0</td>
+      <td>66.0</td>
+      <td>71.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>212198</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>66.0</td>
+      <td>76.0</td>
+      <td>71.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>CM CF CAM</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>66.0</td>
+      <td>76.0</td>
+      <td>71.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>788</th>
+      <td>C. Aránguiz</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/199042.png</td>
+      <td>Chile</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>78</td>
+      <td>78</td>
+      <td>Bayer 04 Leverkusen</td>
+      <td>https://cdn.sofifa.org/24/18/teams/32.png</td>
+      <td>€10.5M</td>
+      <td>€54K</td>
+      <td>2091</td>
+      <td>77</td>
+      <td>68</td>
+      <td>81</td>
+      <td>85</td>
+      <td>80</td>
+      <td>76</td>
+      <td>78</td>
+      <td>75</td>
+      <td>74</td>
+      <td>64</td>
+      <td>76</td>
+      <td>15</td>
+      <td>7</td>
+      <td>12</td>
+      <td>8</td>
+      <td>13</td>
+      <td>53</td>
+      <td>73</td>
+      <td>61</td>
+      <td>81</td>
+      <td>75</td>
+      <td>54</td>
+      <td>79</td>
+      <td>75</td>
+      <td>70</td>
+      <td>81</td>
+      <td>80</td>
+      <td>61</td>
+      <td>73</td>
+      <td>86</td>
+      <td>64</td>
+      <td>64</td>
+      <td>80</td>
+      <td>68</td>
+      <td>77.0</td>
+      <td>65.0</td>
+      <td>72.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>199042</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>65.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>CDM CM</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>65.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>815</th>
+      <td>C. Aránguiz</td>
+      <td>28</td>
+      <td>https://cdn.sofifa.org/48/18/players/199042.png</td>
+      <td>Chile</td>
+      <td>https://cdn.sofifa.org/flags/55.png</td>
+      <td>78</td>
+      <td>78</td>
+      <td>Bayer 04 Leverkusen</td>
+      <td>https://cdn.sofifa.org/24/18/teams/32.png</td>
+      <td>€10.5M</td>
+      <td>€54K</td>
+      <td>2091</td>
+      <td>77</td>
+      <td>68</td>
+      <td>81</td>
+      <td>85</td>
+      <td>80</td>
+      <td>76</td>
+      <td>78</td>
+      <td>75</td>
+      <td>74</td>
+      <td>64</td>
+      <td>76</td>
+      <td>15</td>
+      <td>7</td>
+      <td>12</td>
+      <td>8</td>
+      <td>13</td>
+      <td>53</td>
+      <td>73</td>
+      <td>61</td>
+      <td>81</td>
+      <td>75</td>
+      <td>54</td>
+      <td>79</td>
+      <td>75</td>
+      <td>70</td>
+      <td>81</td>
+      <td>80</td>
+      <td>61</td>
+      <td>73</td>
+      <td>86</td>
+      <td>64</td>
+      <td>64</td>
+      <td>80</td>
+      <td>68</td>
+      <td>77.0</td>
+      <td>65.0</td>
+      <td>72.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>199042</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>65.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>CDM CM</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>65.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>698</th>
+      <td>C. Pulisic</td>
+      <td>18</td>
+      <td>https://cdn.sofifa.org/48/18/players/227796.png</td>
+      <td>United States</td>
+      <td>https://cdn.sofifa.org/flags/95.png</td>
+      <td>78</td>
+      <td>89</td>
+      <td>Borussia Dortmund</td>
+      <td>https://cdn.sofifa.org/24/18/teams/22.png</td>
+      <td>€16.5M</td>
+      <td>€31K</td>
+      <td>1891</td>
+      <td>93</td>
+      <td>44</td>
+      <td>91</td>
+      <td>92</td>
+      <td>79</td>
+      <td>64</td>
+      <td>65</td>
+      <td>69</td>
+      <td>86</td>
+      <td>71</td>
+      <td>58</td>
+      <td>8</td>
+      <td>12</td>
+      <td>13</td>
+      <td>16</td>
+      <td>14</td>
+      <td>49</td>
+      <td>30</td>
+      <td>86</td>
+      <td>59</td>
+      <td>58</td>
+      <td>28</td>
+      <td>48</td>
+      <td>73</td>
+      <td>77</td>
+      <td>76</td>
+      <td>72</td>
+      <td>37</td>
+      <td>90</td>
+      <td>68</td>
+      <td>32</td>
+      <td>51</td>
+      <td>76</td>
+      <td>70</td>
+      <td>77.0</td>
+      <td>45.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>69.0</td>
+      <td>227796</td>
+      <td>77.0</td>
+      <td>56.0</td>
+      <td>45.0</td>
+      <td>69.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>LM LW RW RM</td>
+      <td>77.0</td>
+      <td>56.0</td>
+      <td>45.0</td>
+      <td>69.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>72.0</td>
+    </tr>
+    <tr>
+      <th>886</th>
+      <td>C. Pulisic</td>
+      <td>18</td>
+      <td>https://cdn.sofifa.org/48/18/players/227796.png</td>
+      <td>United States</td>
+      <td>https://cdn.sofifa.org/flags/95.png</td>
+      <td>78</td>
+      <td>89</td>
+      <td>Borussia Dortmund</td>
+      <td>https://cdn.sofifa.org/24/18/teams/22.png</td>
+      <td>€16.5M</td>
+      <td>€31K</td>
+      <td>1891</td>
+      <td>93</td>
+      <td>44</td>
+      <td>91</td>
+      <td>92</td>
+      <td>79</td>
+      <td>64</td>
+      <td>65</td>
+      <td>69</td>
+      <td>86</td>
+      <td>71</td>
+      <td>58</td>
+      <td>8</td>
+      <td>12</td>
+      <td>13</td>
+      <td>16</td>
+      <td>14</td>
+      <td>49</td>
+      <td>30</td>
+      <td>86</td>
+      <td>59</td>
+      <td>58</td>
+      <td>28</td>
+      <td>48</td>
+      <td>73</td>
+      <td>77</td>
+      <td>76</td>
+      <td>72</td>
+      <td>37</td>
+      <td>90</td>
+      <td>68</td>
+      <td>32</td>
+      <td>51</td>
+      <td>76</td>
+      <td>70</td>
+      <td>77.0</td>
+      <td>45.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>69.0</td>
+      <td>227796</td>
+      <td>77.0</td>
+      <td>56.0</td>
+      <td>45.0</td>
+      <td>69.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>LM LW RW RM</td>
+      <td>77.0</td>
+      <td>56.0</td>
+      <td>45.0</td>
+      <td>69.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>72.0</td>
+    </tr>
+    <tr>
+      <th>810</th>
+      <td>Capa</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/216189.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>83</td>
+      <td>SD Eibar</td>
+      <td>https://cdn.sofifa.org/24/18/teams/467.png</td>
+      <td>€11.5M</td>
+      <td>€21K</td>
+      <td>2076</td>
+      <td>85</td>
+      <td>88</td>
+      <td>76</td>
+      <td>86</td>
+      <td>77</td>
+      <td>69</td>
+      <td>77</td>
+      <td>55</td>
+      <td>75</td>
+      <td>56</td>
+      <td>58</td>
+      <td>12</td>
+      <td>13</td>
+      <td>6</td>
+      <td>12</td>
+      <td>11</td>
+      <td>61</td>
+      <td>69</td>
+      <td>77</td>
+      <td>56</td>
+      <td>62</td>
+      <td>69</td>
+      <td>54</td>
+      <td>76</td>
+      <td>73</td>
+      <td>71</td>
+      <td>81</td>
+      <td>82</td>
+      <td>87</td>
+      <td>91</td>
+      <td>76</td>
+      <td>80</td>
+      <td>72</td>
+      <td>52</td>
+      <td>72.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>71.0</td>
+      <td>216189</td>
+      <td>72.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>RB</td>
+      <td>72.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>721</th>
+      <td>Capa</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/216189.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>83</td>
+      <td>SD Eibar</td>
+      <td>https://cdn.sofifa.org/24/18/teams/467.png</td>
+      <td>€11.5M</td>
+      <td>€21K</td>
+      <td>2076</td>
+      <td>85</td>
+      <td>88</td>
+      <td>76</td>
+      <td>86</td>
+      <td>77</td>
+      <td>69</td>
+      <td>77</td>
+      <td>55</td>
+      <td>75</td>
+      <td>56</td>
+      <td>58</td>
+      <td>12</td>
+      <td>13</td>
+      <td>6</td>
+      <td>12</td>
+      <td>11</td>
+      <td>61</td>
+      <td>69</td>
+      <td>77</td>
+      <td>56</td>
+      <td>62</td>
+      <td>69</td>
+      <td>54</td>
+      <td>76</td>
+      <td>73</td>
+      <td>71</td>
+      <td>81</td>
+      <td>82</td>
+      <td>87</td>
+      <td>91</td>
+      <td>76</td>
+      <td>80</td>
+      <td>72</td>
+      <td>52</td>
+      <td>72.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>71.0</td>
+      <td>216189</td>
+      <td>72.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>RB</td>
+      <td>72.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>734</th>
+      <td>Carles Gil</td>
+      <td>24</td>
+      <td>https://cdn.sofifa.org/48/18/players/210930.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>83</td>
+      <td>RC Deportivo de La Coruña</td>
+      <td>https://cdn.sofifa.org/24/18/teams/242.png</td>
+      <td>€14M</td>
+      <td>€23K</td>
+      <td>1863</td>
+      <td>70</td>
+      <td>41</td>
+      <td>75</td>
+      <td>75</td>
+      <td>80</td>
+      <td>72</td>
+      <td>79</td>
+      <td>76</td>
+      <td>81</td>
+      <td>72</td>
+      <td>58</td>
+      <td>12</td>
+      <td>15</td>
+      <td>16</td>
+      <td>9</td>
+      <td>6</td>
+      <td>34</td>
+      <td>40</td>
+      <td>60</td>
+      <td>78</td>
+      <td>66</td>
+      <td>36</td>
+      <td>69</td>
+      <td>74</td>
+      <td>76</td>
+      <td>81</td>
+      <td>63</td>
+      <td>39</td>
+      <td>70</td>
+      <td>66</td>
+      <td>43</td>
+      <td>55</td>
+      <td>77</td>
+      <td>71</td>
+      <td>77.0</td>
+      <td>47.0</td>
+      <td>60.0</td>
+      <td>75.0</td>
+      <td>74.0</td>
+      <td>210930</td>
+      <td>77.0</td>
+      <td>57.0</td>
+      <td>47.0</td>
+      <td>74.0</td>
+      <td>60.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>69.0</td>
+      <td>76.0</td>
+      <td>62.0</td>
+      <td>CAM RM</td>
+      <td>77.0</td>
+      <td>57.0</td>
+      <td>47.0</td>
+      <td>74.0</td>
+      <td>60.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>69.0</td>
+      <td>76.0</td>
+      <td>62.0</td>
+      <td>69.0</td>
+    </tr>
+    <tr>
+      <th>916</th>
+      <td>Carles Gil</td>
+      <td>24</td>
+      <td>https://cdn.sofifa.org/48/18/players/210930.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>83</td>
+      <td>RC Deportivo de La Coruña</td>
+      <td>https://cdn.sofifa.org/24/18/teams/242.png</td>
+      <td>€14M</td>
+      <td>€23K</td>
+      <td>1863</td>
+      <td>70</td>
+      <td>41</td>
+      <td>75</td>
+      <td>75</td>
+      <td>80</td>
+      <td>72</td>
+      <td>79</td>
+      <td>76</td>
+      <td>81</td>
+      <td>72</td>
+      <td>58</td>
+      <td>12</td>
+      <td>15</td>
+      <td>16</td>
+      <td>9</td>
+      <td>6</td>
+      <td>34</td>
+      <td>40</td>
+      <td>60</td>
+      <td>78</td>
+      <td>66</td>
+      <td>36</td>
+      <td>69</td>
+      <td>74</td>
+      <td>76</td>
+      <td>81</td>
+      <td>63</td>
+      <td>39</td>
+      <td>70</td>
+      <td>66</td>
+      <td>43</td>
+      <td>55</td>
+      <td>77</td>
+      <td>71</td>
+      <td>77.0</td>
+      <td>47.0</td>
+      <td>60.0</td>
+      <td>75.0</td>
+      <td>74.0</td>
+      <td>210930</td>
+      <td>77.0</td>
+      <td>57.0</td>
+      <td>47.0</td>
+      <td>74.0</td>
+      <td>60.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>69.0</td>
+      <td>76.0</td>
+      <td>62.0</td>
+      <td>CAM RM</td>
+      <td>77.0</td>
+      <td>57.0</td>
+      <td>47.0</td>
+      <td>74.0</td>
+      <td>60.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>69.0</td>
+      <td>76.0</td>
+      <td>62.0</td>
+      <td>69.0</td>
+    </tr>
+    <tr>
+      <th>895</th>
+      <td>D. Caligiuri</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/197083.png</td>
+      <td>Italy</td>
+      <td>https://cdn.sofifa.org/flags/27.png</td>
+      <td>78</td>
+      <td>78</td>
+      <td>FC Schalke 04</td>
+      <td>https://cdn.sofifa.org/24/18/teams/34.png</td>
+      <td>€10M</td>
+      <td>€42K</td>
+      <td>1997</td>
+      <td>78</td>
+      <td>59</td>
+      <td>78</td>
+      <td>76</td>
+      <td>79</td>
+      <td>74</td>
+      <td>76</td>
+      <td>78</td>
+      <td>81</td>
+      <td>69</td>
+      <td>61</td>
+      <td>12</td>
+      <td>10</td>
+      <td>13</td>
+      <td>6</td>
+      <td>14</td>
+      <td>56</td>
+      <td>52</td>
+      <td>76</td>
+      <td>63</td>
+      <td>70</td>
+      <td>42</td>
+      <td>79</td>
+      <td>76</td>
+      <td>78</td>
+      <td>77</td>
+      <td>78</td>
+      <td>41</td>
+      <td>78</td>
+      <td>76</td>
+      <td>53</td>
+      <td>68</td>
+      <td>76</td>
+      <td>68</td>
+      <td>76.0</td>
+      <td>57.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>73.0</td>
+      <td>197083</td>
+      <td>76.0</td>
+      <td>63.0</td>
+      <td>57.0</td>
+      <td>73.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>66.0</td>
+      <td>RW LM RM</td>
+      <td>76.0</td>
+      <td>63.0</td>
+      <td>57.0</td>
+      <td>73.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>66.0</td>
+      <td>73.0</td>
+    </tr>
+    <tr>
+      <th>795</th>
+      <td>D. Caligiuri</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/197083.png</td>
+      <td>Italy</td>
+      <td>https://cdn.sofifa.org/flags/27.png</td>
+      <td>78</td>
+      <td>78</td>
+      <td>FC Schalke 04</td>
+      <td>https://cdn.sofifa.org/24/18/teams/34.png</td>
+      <td>€10M</td>
+      <td>€42K</td>
+      <td>1997</td>
+      <td>78</td>
+      <td>59</td>
+      <td>78</td>
+      <td>76</td>
+      <td>79</td>
+      <td>74</td>
+      <td>76</td>
+      <td>78</td>
+      <td>81</td>
+      <td>69</td>
+      <td>61</td>
+      <td>12</td>
+      <td>10</td>
+      <td>13</td>
+      <td>6</td>
+      <td>14</td>
+      <td>56</td>
+      <td>52</td>
+      <td>76</td>
+      <td>63</td>
+      <td>70</td>
+      <td>42</td>
+      <td>79</td>
+      <td>76</td>
+      <td>78</td>
+      <td>77</td>
+      <td>78</td>
+      <td>41</td>
+      <td>78</td>
+      <td>76</td>
+      <td>53</td>
+      <td>68</td>
+      <td>76</td>
+      <td>68</td>
+      <td>76.0</td>
+      <td>57.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>73.0</td>
+      <td>197083</td>
+      <td>76.0</td>
+      <td>63.0</td>
+      <td>57.0</td>
+      <td>73.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>66.0</td>
+      <td>RW LM RM</td>
+      <td>76.0</td>
+      <td>63.0</td>
+      <td>57.0</td>
+      <td>73.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>66.0</td>
+      <td>73.0</td>
+    </tr>
+    <tr>
+      <th>828</th>
+      <td>D. Cheryshev</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/206225.png</td>
+      <td>Russia</td>
+      <td>https://cdn.sofifa.org/flags/40.png</td>
+      <td>78</td>
+      <td>79</td>
+      <td>Villarreal CF</td>
+      <td>https://cdn.sofifa.org/24/18/teams/483.png</td>
+      <td>€12M</td>
+      <td>€35K</td>
+      <td>2022</td>
+      <td>78</td>
+      <td>65</td>
+      <td>76</td>
+      <td>74</td>
+      <td>81</td>
+      <td>69</td>
+      <td>80</td>
+      <td>74</td>
+      <td>80</td>
+      <td>74</td>
+      <td>61</td>
+      <td>16</td>
+      <td>7</td>
+      <td>14</td>
+      <td>7</td>
+      <td>8</td>
+      <td>54</td>
+      <td>61</td>
+      <td>75</td>
+      <td>68</td>
+      <td>71</td>
+      <td>52</td>
+      <td>64</td>
+      <td>78</td>
+      <td>75</td>
+      <td>76</td>
+      <td>80</td>
+      <td>54</td>
+      <td>82</td>
+      <td>66</td>
+      <td>57</td>
+      <td>67</td>
+      <td>79</td>
+      <td>68</td>
+      <td>77.0</td>
+      <td>62.0</td>
+      <td>67.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>206225</td>
+      <td>77.0</td>
+      <td>67.0</td>
+      <td>62.0</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>69.0</td>
+      <td>LW LM</td>
+      <td>77.0</td>
+      <td>67.0</td>
+      <td>62.0</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>69.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>748</th>
+      <td>D. Cheryshev</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/206225.png</td>
+      <td>Russia</td>
+      <td>https://cdn.sofifa.org/flags/40.png</td>
+      <td>78</td>
+      <td>79</td>
+      <td>Villarreal CF</td>
+      <td>https://cdn.sofifa.org/24/18/teams/483.png</td>
+      <td>€12M</td>
+      <td>€35K</td>
+      <td>2022</td>
+      <td>78</td>
+      <td>65</td>
+      <td>76</td>
+      <td>74</td>
+      <td>81</td>
+      <td>69</td>
+      <td>80</td>
+      <td>74</td>
+      <td>80</td>
+      <td>74</td>
+      <td>61</td>
+      <td>16</td>
+      <td>7</td>
+      <td>14</td>
+      <td>7</td>
+      <td>8</td>
+      <td>54</td>
+      <td>61</td>
+      <td>75</td>
+      <td>68</td>
+      <td>71</td>
+      <td>52</td>
+      <td>64</td>
+      <td>78</td>
+      <td>75</td>
+      <td>76</td>
+      <td>80</td>
+      <td>54</td>
+      <td>82</td>
+      <td>66</td>
+      <td>57</td>
+      <td>67</td>
+      <td>79</td>
+      <td>68</td>
+      <td>77.0</td>
+      <td>62.0</td>
+      <td>67.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>206225</td>
+      <td>77.0</td>
+      <td>67.0</td>
+      <td>62.0</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>69.0</td>
+      <td>LW LM</td>
+      <td>77.0</td>
+      <td>67.0</td>
+      <td>62.0</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>69.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>804</th>
+      <td>D. Heintz</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/206198.png</td>
+      <td>Germany</td>
+      <td>https://cdn.sofifa.org/flags/21.png</td>
+      <td>78</td>
+      <td>82</td>
+      <td>1. FC Köln</td>
+      <td>https://cdn.sofifa.org/24/18/teams/31.png</td>
+      <td>€11.5M</td>
+      <td>€30K</td>
+      <td>1684</td>
+      <td>55</td>
+      <td>70</td>
+      <td>53</td>
+      <td>49</td>
+      <td>59</td>
+      <td>69</td>
+      <td>51</td>
+      <td>48</td>
+      <td>46</td>
+      <td>23</td>
+      <td>32</td>
+      <td>14</td>
+      <td>15</td>
+      <td>7</td>
+      <td>9</td>
+      <td>15</td>
+      <td>79</td>
+      <td>76</td>
+      <td>67</td>
+      <td>70</td>
+      <td>28</td>
+      <td>78</td>
+      <td>41</td>
+      <td>26</td>
+      <td>77</td>
+      <td>75</td>
+      <td>49</td>
+      <td>77</td>
+      <td>68</td>
+      <td>69</td>
+      <td>83</td>
+      <td>84</td>
+      <td>65</td>
+      <td>26</td>
+      <td>55.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>51.0</td>
+      <td>63.0</td>
+      <td>206198</td>
+      <td>55.0</td>
+      <td>72.0</td>
+      <td>77.0</td>
+      <td>63.0</td>
+      <td>74.0</td>
+      <td>51.0</td>
+      <td>56.0</td>
+      <td>51.0</td>
+      <td>52.0</td>
+      <td>69.0</td>
+      <td>CB</td>
+      <td>55.0</td>
+      <td>72.0</td>
+      <td>77.0</td>
+      <td>63.0</td>
+      <td>74.0</td>
+      <td>51.0</td>
+      <td>56.0</td>
+      <td>51.0</td>
+      <td>52.0</td>
+      <td>69.0</td>
+      <td>51.0</td>
+    </tr>
+    <tr>
+      <th>750</th>
+      <td>D. Heintz</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/206198.png</td>
+      <td>Germany</td>
+      <td>https://cdn.sofifa.org/flags/21.png</td>
+      <td>78</td>
+      <td>82</td>
+      <td>1. FC Köln</td>
+      <td>https://cdn.sofifa.org/24/18/teams/31.png</td>
+      <td>€11.5M</td>
+      <td>€30K</td>
+      <td>1684</td>
+      <td>55</td>
+      <td>70</td>
+      <td>53</td>
+      <td>49</td>
+      <td>59</td>
+      <td>69</td>
+      <td>51</td>
+      <td>48</td>
+      <td>46</td>
+      <td>23</td>
+      <td>32</td>
+      <td>14</td>
+      <td>15</td>
+      <td>7</td>
+      <td>9</td>
+      <td>15</td>
+      <td>79</td>
+      <td>76</td>
+      <td>67</td>
+      <td>70</td>
+      <td>28</td>
+      <td>78</td>
+      <td>41</td>
+      <td>26</td>
+      <td>77</td>
+      <td>75</td>
+      <td>49</td>
+      <td>77</td>
+      <td>68</td>
+      <td>69</td>
+      <td>83</td>
+      <td>84</td>
+      <td>65</td>
+      <td>26</td>
+      <td>55.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>51.0</td>
+      <td>63.0</td>
+      <td>206198</td>
+      <td>55.0</td>
+      <td>72.0</td>
+      <td>77.0</td>
+      <td>63.0</td>
+      <td>74.0</td>
+      <td>51.0</td>
+      <td>56.0</td>
+      <td>51.0</td>
+      <td>52.0</td>
+      <td>69.0</td>
+      <td>CB</td>
+      <td>55.0</td>
+      <td>72.0</td>
+      <td>77.0</td>
+      <td>63.0</td>
+      <td>74.0</td>
+      <td>51.0</td>
+      <td>56.0</td>
+      <td>51.0</td>
+      <td>52.0</td>
+      <td>69.0</td>
+      <td>51.0</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>733</th>
+      <td>Pedro Santos</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/211119.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>78</td>
+      <td>78</td>
+      <td>Columbus Crew SC</td>
+      <td>https://cdn.sofifa.org/24/18/teams/687.png</td>
+      <td>€10M</td>
+      <td>€11K</td>
+      <td>1916</td>
+      <td>88</td>
+      <td>39</td>
+      <td>85</td>
+      <td>81</td>
+      <td>79</td>
+      <td>75</td>
+      <td>76</td>
+      <td>80</td>
+      <td>80</td>
+      <td>73</td>
+      <td>76</td>
+      <td>14</td>
+      <td>8</td>
+      <td>12</td>
+      <td>12</td>
+      <td>7</td>
+      <td>62</td>
+      <td>34</td>
+      <td>72</td>
+      <td>64</td>
+      <td>74</td>
+      <td>23</td>
+      <td>65</td>
+      <td>77</td>
+      <td>76</td>
+      <td>73</td>
+      <td>76</td>
+      <td>26</td>
+      <td>87</td>
+      <td>79</td>
+      <td>28</td>
+      <td>52</td>
+      <td>74</td>
+      <td>64</td>
+      <td>77.0</td>
+      <td>44.0</td>
+      <td>53.0</td>
+      <td>77.0</td>
+      <td>70.0</td>
+      <td>211119</td>
+      <td>77.0</td>
+      <td>55.0</td>
+      <td>44.0</td>
+      <td>70.0</td>
+      <td>53.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>LM RM</td>
+      <td>77.0</td>
+      <td>55.0</td>
+      <td>44.0</td>
+      <td>70.0</td>
+      <td>53.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>855</th>
+      <td>Pedro Santos</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/211119.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>78</td>
+      <td>78</td>
+      <td>Columbus Crew SC</td>
+      <td>https://cdn.sofifa.org/24/18/teams/687.png</td>
+      <td>€10M</td>
+      <td>€11K</td>
+      <td>1916</td>
+      <td>88</td>
+      <td>39</td>
+      <td>85</td>
+      <td>81</td>
+      <td>79</td>
+      <td>75</td>
+      <td>76</td>
+      <td>80</td>
+      <td>80</td>
+      <td>73</td>
+      <td>76</td>
+      <td>14</td>
+      <td>8</td>
+      <td>12</td>
+      <td>12</td>
+      <td>7</td>
+      <td>62</td>
+      <td>34</td>
+      <td>72</td>
+      <td>64</td>
+      <td>74</td>
+      <td>23</td>
+      <td>65</td>
+      <td>77</td>
+      <td>76</td>
+      <td>73</td>
+      <td>76</td>
+      <td>26</td>
+      <td>87</td>
+      <td>79</td>
+      <td>28</td>
+      <td>52</td>
+      <td>74</td>
+      <td>64</td>
+      <td>77.0</td>
+      <td>44.0</td>
+      <td>53.0</td>
+      <td>77.0</td>
+      <td>70.0</td>
+      <td>211119</td>
+      <td>77.0</td>
+      <td>55.0</td>
+      <td>44.0</td>
+      <td>70.0</td>
+      <td>53.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>LM RM</td>
+      <td>77.0</td>
+      <td>55.0</td>
+      <td>44.0</td>
+      <td>70.0</td>
+      <td>53.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>805</th>
+      <td>Pozuelo</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/203895.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>81</td>
+      <td>KRC Genk</td>
+      <td>https://cdn.sofifa.org/24/18/teams/673.png</td>
+      <td>€13M</td>
+      <td>€19K</td>
+      <td>1891</td>
+      <td>62</td>
+      <td>52</td>
+      <td>76</td>
+      <td>82</td>
+      <td>82</td>
+      <td>82</td>
+      <td>64</td>
+      <td>77</td>
+      <td>77</td>
+      <td>64</td>
+      <td>72</td>
+      <td>10</td>
+      <td>8</td>
+      <td>14</td>
+      <td>10</td>
+      <td>8</td>
+      <td>39</td>
+      <td>62</td>
+      <td>59</td>
+      <td>68</td>
+      <td>76</td>
+      <td>47</td>
+      <td>66</td>
+      <td>74</td>
+      <td>76</td>
+      <td>83</td>
+      <td>64</td>
+      <td>40</td>
+      <td>57</td>
+      <td>75</td>
+      <td>52</td>
+      <td>50</td>
+      <td>83</td>
+      <td>62</td>
+      <td>77.0</td>
+      <td>54.0</td>
+      <td>66.0</td>
+      <td>74.0</td>
+      <td>76.0</td>
+      <td>203895</td>
+      <td>77.0</td>
+      <td>61.0</td>
+      <td>54.0</td>
+      <td>76.0</td>
+      <td>66.0</td>
+      <td>74.0</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>73.0</td>
+      <td>64.0</td>
+      <td>CDM CM CAM</td>
+      <td>77.0</td>
+      <td>61.0</td>
+      <td>54.0</td>
+      <td>76.0</td>
+      <td>66.0</td>
+      <td>74.0</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>73.0</td>
+      <td>64.0</td>
+      <td>67.0</td>
+    </tr>
+    <tr>
+      <th>762</th>
+      <td>Pozuelo</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/203895.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>81</td>
+      <td>KRC Genk</td>
+      <td>https://cdn.sofifa.org/24/18/teams/673.png</td>
+      <td>€13M</td>
+      <td>€19K</td>
+      <td>1891</td>
+      <td>62</td>
+      <td>52</td>
+      <td>76</td>
+      <td>82</td>
+      <td>82</td>
+      <td>82</td>
+      <td>64</td>
+      <td>77</td>
+      <td>77</td>
+      <td>64</td>
+      <td>72</td>
+      <td>10</td>
+      <td>8</td>
+      <td>14</td>
+      <td>10</td>
+      <td>8</td>
+      <td>39</td>
+      <td>62</td>
+      <td>59</td>
+      <td>68</td>
+      <td>76</td>
+      <td>47</td>
+      <td>66</td>
+      <td>74</td>
+      <td>76</td>
+      <td>83</td>
+      <td>64</td>
+      <td>40</td>
+      <td>57</td>
+      <td>75</td>
+      <td>52</td>
+      <td>50</td>
+      <td>83</td>
+      <td>62</td>
+      <td>77.0</td>
+      <td>54.0</td>
+      <td>66.0</td>
+      <td>74.0</td>
+      <td>76.0</td>
+      <td>203895</td>
+      <td>77.0</td>
+      <td>61.0</td>
+      <td>54.0</td>
+      <td>76.0</td>
+      <td>66.0</td>
+      <td>74.0</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>73.0</td>
+      <td>64.0</td>
+      <td>CDM CM CAM</td>
+      <td>77.0</td>
+      <td>61.0</td>
+      <td>54.0</td>
+      <td>76.0</td>
+      <td>66.0</td>
+      <td>74.0</td>
+      <td>74.0</td>
+      <td>67.0</td>
+      <td>73.0</td>
+      <td>64.0</td>
+      <td>67.0</td>
+    </tr>
+    <tr>
+      <th>865</th>
+      <td>R. Battaglia</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/219576.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>78</td>
+      <td>80</td>
+      <td>Sporting CP</td>
+      <td>https://cdn.sofifa.org/24/18/teams/237.png</td>
+      <td>€12.5M</td>
+      <td>€18K</td>
+      <td>2073</td>
+      <td>65</td>
+      <td>83</td>
+      <td>67</td>
+      <td>67</td>
+      <td>76</td>
+      <td>77</td>
+      <td>58</td>
+      <td>65</td>
+      <td>77</td>
+      <td>65</td>
+      <td>64</td>
+      <td>7</td>
+      <td>7</td>
+      <td>7</td>
+      <td>9</td>
+      <td>9</td>
+      <td>68</td>
+      <td>83</td>
+      <td>74</td>
+      <td>73</td>
+      <td>81</td>
+      <td>73</td>
+      <td>57</td>
+      <td>73</td>
+      <td>78</td>
+      <td>77</td>
+      <td>80</td>
+      <td>75</td>
+      <td>67</td>
+      <td>91</td>
+      <td>81</td>
+      <td>82</td>
+      <td>70</td>
+      <td>64</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>219576</td>
+      <td>74.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>76.0</td>
+      <td>CDM CM</td>
+      <td>74.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>76.0</td>
+      <td>73.0</td>
+    </tr>
+    <tr>
+      <th>715</th>
+      <td>R. Battaglia</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/219576.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>78</td>
+      <td>80</td>
+      <td>Sporting CP</td>
+      <td>https://cdn.sofifa.org/24/18/teams/237.png</td>
+      <td>€12.5M</td>
+      <td>€18K</td>
+      <td>2073</td>
+      <td>65</td>
+      <td>83</td>
+      <td>67</td>
+      <td>67</td>
+      <td>76</td>
+      <td>77</td>
+      <td>58</td>
+      <td>65</td>
+      <td>77</td>
+      <td>65</td>
+      <td>64</td>
+      <td>7</td>
+      <td>7</td>
+      <td>7</td>
+      <td>9</td>
+      <td>9</td>
+      <td>68</td>
+      <td>83</td>
+      <td>74</td>
+      <td>73</td>
+      <td>81</td>
+      <td>73</td>
+      <td>57</td>
+      <td>73</td>
+      <td>78</td>
+      <td>77</td>
+      <td>80</td>
+      <td>75</td>
+      <td>67</td>
+      <td>91</td>
+      <td>81</td>
+      <td>82</td>
+      <td>70</td>
+      <td>64</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>219576</td>
+      <td>74.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>76.0</td>
+      <td>CDM CM</td>
+      <td>74.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>76.0</td>
+      <td>73.0</td>
+    </tr>
+    <tr>
+      <th>792</th>
+      <td>R. Funes Mori</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/198140.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>78</td>
+      <td>81</td>
+      <td>Monterrey</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1032.png</td>
+      <td>€13M</td>
+      <td>€63K</td>
+      <td>2020</td>
+      <td>79</td>
+      <td>80</td>
+      <td>79</td>
+      <td>73</td>
+      <td>74</td>
+      <td>76</td>
+      <td>65</td>
+      <td>75</td>
+      <td>75</td>
+      <td>82</td>
+      <td>58</td>
+      <td>8</td>
+      <td>10</td>
+      <td>15</td>
+      <td>6</td>
+      <td>15</td>
+      <td>77</td>
+      <td>49</td>
+      <td>78</td>
+      <td>65</td>
+      <td>68</td>
+      <td>47</td>
+      <td>70</td>
+      <td>80</td>
+      <td>78</td>
+      <td>70</td>
+      <td>74</td>
+      <td>44</td>
+      <td>76</td>
+      <td>84</td>
+      <td>45</td>
+      <td>77</td>
+      <td>72</td>
+      <td>72</td>
+      <td>74.0</td>
+      <td>60.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>70.0</td>
+      <td>198140</td>
+      <td>74.0</td>
+      <td>62.0</td>
+      <td>60.0</td>
+      <td>70.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>64.0</td>
+      <td>ST</td>
+      <td>74.0</td>
+      <td>62.0</td>
+      <td>60.0</td>
+      <td>70.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>64.0</td>
+      <td>77.0</td>
+    </tr>
+    <tr>
+      <th>922</th>
+      <td>R. Funes Mori</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/198140.png</td>
+      <td>Argentina</td>
+      <td>https://cdn.sofifa.org/flags/52.png</td>
+      <td>78</td>
+      <td>81</td>
+      <td>Monterrey</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1032.png</td>
+      <td>€13M</td>
+      <td>€63K</td>
+      <td>2020</td>
+      <td>79</td>
+      <td>80</td>
+      <td>79</td>
+      <td>73</td>
+      <td>74</td>
+      <td>76</td>
+      <td>65</td>
+      <td>75</td>
+      <td>75</td>
+      <td>82</td>
+      <td>58</td>
+      <td>8</td>
+      <td>10</td>
+      <td>15</td>
+      <td>6</td>
+      <td>15</td>
+      <td>77</td>
+      <td>49</td>
+      <td>78</td>
+      <td>65</td>
+      <td>68</td>
+      <td>47</td>
+      <td>70</td>
+      <td>80</td>
+      <td>78</td>
+      <td>70</td>
+      <td>74</td>
+      <td>44</td>
+      <td>76</td>
+      <td>84</td>
+      <td>45</td>
+      <td>77</td>
+      <td>72</td>
+      <td>72</td>
+      <td>74.0</td>
+      <td>60.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>70.0</td>
+      <td>198140</td>
+      <td>74.0</td>
+      <td>62.0</td>
+      <td>60.0</td>
+      <td>70.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>64.0</td>
+      <td>ST</td>
+      <td>74.0</td>
+      <td>62.0</td>
+      <td>60.0</td>
+      <td>70.0</td>
+      <td>63.0</td>
+      <td>76.0</td>
+      <td>74.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>64.0</td>
+      <td>77.0</td>
+    </tr>
+    <tr>
+      <th>732</th>
+      <td>R. Gagliardini</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/212153.png</td>
+      <td>Italy</td>
+      <td>https://cdn.sofifa.org/flags/27.png</td>
+      <td>78</td>
+      <td>85</td>
+      <td>Inter</td>
+      <td>https://cdn.sofifa.org/24/18/teams/44.png</td>
+      <td>€14.5M</td>
+      <td>€27K</td>
+      <td>2004</td>
+      <td>71</td>
+      <td>71</td>
+      <td>65</td>
+      <td>63</td>
+      <td>78</td>
+      <td>75</td>
+      <td>64</td>
+      <td>70</td>
+      <td>76</td>
+      <td>55</td>
+      <td>39</td>
+      <td>12</td>
+      <td>6</td>
+      <td>8</td>
+      <td>7</td>
+      <td>9</td>
+      <td>76</td>
+      <td>79</td>
+      <td>65</td>
+      <td>74</td>
+      <td>75</td>
+      <td>70</td>
+      <td>41</td>
+      <td>70</td>
+      <td>78</td>
+      <td>80</td>
+      <td>75</td>
+      <td>76</td>
+      <td>70</td>
+      <td>85</td>
+      <td>78</td>
+      <td>71</td>
+      <td>78</td>
+      <td>69</td>
+      <td>75.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>212153</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>76.0</td>
+      <td>CDM CM</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>76.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>869</th>
+      <td>R. Gagliardini</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/212153.png</td>
+      <td>Italy</td>
+      <td>https://cdn.sofifa.org/flags/27.png</td>
+      <td>78</td>
+      <td>85</td>
+      <td>Inter</td>
+      <td>https://cdn.sofifa.org/24/18/teams/44.png</td>
+      <td>€14.5M</td>
+      <td>€27K</td>
+      <td>2004</td>
+      <td>71</td>
+      <td>71</td>
+      <td>65</td>
+      <td>63</td>
+      <td>78</td>
+      <td>75</td>
+      <td>64</td>
+      <td>70</td>
+      <td>76</td>
+      <td>55</td>
+      <td>39</td>
+      <td>12</td>
+      <td>6</td>
+      <td>8</td>
+      <td>7</td>
+      <td>9</td>
+      <td>76</td>
+      <td>79</td>
+      <td>65</td>
+      <td>74</td>
+      <td>75</td>
+      <td>70</td>
+      <td>41</td>
+      <td>70</td>
+      <td>78</td>
+      <td>80</td>
+      <td>75</td>
+      <td>76</td>
+      <td>70</td>
+      <td>85</td>
+      <td>78</td>
+      <td>71</td>
+      <td>78</td>
+      <td>69</td>
+      <td>75.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>212153</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>76.0</td>
+      <td>CDM CM</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>74.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>76.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>719</th>
+      <td>Rafa</td>
+      <td>24</td>
+      <td>https://cdn.sofifa.org/48/18/players/216547.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>78</td>
+      <td>83</td>
+      <td>SL Benfica</td>
+      <td>https://cdn.sofifa.org/24/18/teams/234.png</td>
+      <td>€14M</td>
+      <td>€13K</td>
+      <td>1846</td>
+      <td>91</td>
+      <td>40</td>
+      <td>91</td>
+      <td>85</td>
+      <td>80</td>
+      <td>77</td>
+      <td>73</td>
+      <td>75</td>
+      <td>83</td>
+      <td>65</td>
+      <td>56</td>
+      <td>9</td>
+      <td>11</td>
+      <td>11</td>
+      <td>12</td>
+      <td>8</td>
+      <td>46</td>
+      <td>43</td>
+      <td>58</td>
+      <td>60</td>
+      <td>64</td>
+      <td>23</td>
+      <td>59</td>
+      <td>78</td>
+      <td>79</td>
+      <td>74</td>
+      <td>71</td>
+      <td>31</td>
+      <td>92</td>
+      <td>64</td>
+      <td>38</td>
+      <td>37</td>
+      <td>75</td>
+      <td>64</td>
+      <td>77.0</td>
+      <td>44.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>70.0</td>
+      <td>216547</td>
+      <td>77.0</td>
+      <td>57.0</td>
+      <td>44.0</td>
+      <td>70.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>78.0</td>
+      <td>61.0</td>
+      <td>ST RM LM</td>
+      <td>77.0</td>
+      <td>57.0</td>
+      <td>44.0</td>
+      <td>70.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>78.0</td>
+      <td>61.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>902</th>
+      <td>Rafa</td>
+      <td>24</td>
+      <td>https://cdn.sofifa.org/48/18/players/216547.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>78</td>
+      <td>83</td>
+      <td>SL Benfica</td>
+      <td>https://cdn.sofifa.org/24/18/teams/234.png</td>
+      <td>€14M</td>
+      <td>€13K</td>
+      <td>1846</td>
+      <td>91</td>
+      <td>40</td>
+      <td>91</td>
+      <td>85</td>
+      <td>80</td>
+      <td>77</td>
+      <td>73</td>
+      <td>75</td>
+      <td>83</td>
+      <td>65</td>
+      <td>56</td>
+      <td>9</td>
+      <td>11</td>
+      <td>11</td>
+      <td>12</td>
+      <td>8</td>
+      <td>46</td>
+      <td>43</td>
+      <td>58</td>
+      <td>60</td>
+      <td>64</td>
+      <td>23</td>
+      <td>59</td>
+      <td>78</td>
+      <td>79</td>
+      <td>74</td>
+      <td>71</td>
+      <td>31</td>
+      <td>92</td>
+      <td>64</td>
+      <td>38</td>
+      <td>37</td>
+      <td>75</td>
+      <td>64</td>
+      <td>77.0</td>
+      <td>44.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>70.0</td>
+      <td>216547</td>
+      <td>77.0</td>
+      <td>57.0</td>
+      <td>44.0</td>
+      <td>70.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>78.0</td>
+      <td>61.0</td>
+      <td>ST RM LM</td>
+      <td>77.0</td>
+      <td>57.0</td>
+      <td>44.0</td>
+      <td>70.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>71.0</td>
+      <td>78.0</td>
+      <td>61.0</td>
+      <td>71.0</td>
+    </tr>
+    <tr>
+      <th>889</th>
+      <td>Raúl Navas</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/198614.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>79</td>
+      <td>Real Sociedad</td>
+      <td>https://cdn.sofifa.org/24/18/teams/457.png</td>
+      <td>€9M</td>
+      <td>€30K</td>
+      <td>1716</td>
+      <td>55</td>
+      <td>85</td>
+      <td>55</td>
+      <td>65</td>
+      <td>71</td>
+      <td>68</td>
+      <td>49</td>
+      <td>34</td>
+      <td>25</td>
+      <td>36</td>
+      <td>65</td>
+      <td>10</td>
+      <td>16</td>
+      <td>9</td>
+      <td>12</td>
+      <td>10</td>
+      <td>79</td>
+      <td>72</td>
+      <td>75</td>
+      <td>56</td>
+      <td>41</td>
+      <td>78</td>
+      <td>46</td>
+      <td>39</td>
+      <td>61</td>
+      <td>75</td>
+      <td>72</td>
+      <td>81</td>
+      <td>51</td>
+      <td>44</td>
+      <td>83</td>
+      <td>76</td>
+      <td>46</td>
+      <td>44</td>
+      <td>52.0</td>
+      <td>77.0</td>
+      <td>70.0</td>
+      <td>51.0</td>
+      <td>58.0</td>
+      <td>198614</td>
+      <td>52.0</td>
+      <td>68.0</td>
+      <td>77.0</td>
+      <td>58.0</td>
+      <td>70.0</td>
+      <td>51.0</td>
+      <td>51.0</td>
+      <td>55.0</td>
+      <td>49.0</td>
+      <td>64.0</td>
+      <td>CB</td>
+      <td>52.0</td>
+      <td>68.0</td>
+      <td>77.0</td>
+      <td>58.0</td>
+      <td>70.0</td>
+      <td>51.0</td>
+      <td>51.0</td>
+      <td>55.0</td>
+      <td>49.0</td>
+      <td>64.0</td>
+      <td>55.0</td>
+    </tr>
+    <tr>
+      <th>789</th>
+      <td>Raúl Navas</td>
+      <td>29</td>
+      <td>https://cdn.sofifa.org/48/18/players/198614.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>79</td>
+      <td>Real Sociedad</td>
+      <td>https://cdn.sofifa.org/24/18/teams/457.png</td>
+      <td>€9M</td>
+      <td>€30K</td>
+      <td>1716</td>
+      <td>55</td>
+      <td>85</td>
+      <td>55</td>
+      <td>65</td>
+      <td>71</td>
+      <td>68</td>
+      <td>49</td>
+      <td>34</td>
+      <td>25</td>
+      <td>36</td>
+      <td>65</td>
+      <td>10</td>
+      <td>16</td>
+      <td>9</td>
+      <td>12</td>
+      <td>10</td>
+      <td>79</td>
+      <td>72</td>
+      <td>75</td>
+      <td>56</td>
+      <td>41</td>
+      <td>78</td>
+      <td>46</td>
+      <td>39</td>
+      <td>61</td>
+      <td>75</td>
+      <td>72</td>
+      <td>81</td>
+      <td>51</td>
+      <td>44</td>
+      <td>83</td>
+      <td>76</td>
+      <td>46</td>
+      <td>44</td>
+      <td>52.0</td>
+      <td>77.0</td>
+      <td>70.0</td>
+      <td>51.0</td>
+      <td>58.0</td>
+      <td>198614</td>
+      <td>52.0</td>
+      <td>68.0</td>
+      <td>77.0</td>
+      <td>58.0</td>
+      <td>70.0</td>
+      <td>51.0</td>
+      <td>51.0</td>
+      <td>55.0</td>
+      <td>49.0</td>
+      <td>64.0</td>
+      <td>CB</td>
+      <td>52.0</td>
+      <td>68.0</td>
+      <td>77.0</td>
+      <td>58.0</td>
+      <td>70.0</td>
+      <td>51.0</td>
+      <td>51.0</td>
+      <td>55.0</td>
+      <td>49.0</td>
+      <td>64.0</td>
+      <td>55.0</td>
+    </tr>
+    <tr>
+      <th>791</th>
+      <td>Rodrigo</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/198329.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>81</td>
+      <td>Valencia CF</td>
+      <td>https://cdn.sofifa.org/24/18/teams/461.png</td>
+      <td>€13M</td>
+      <td>€36K</td>
+      <td>1938</td>
+      <td>89</td>
+      <td>52</td>
+      <td>81</td>
+      <td>68</td>
+      <td>78</td>
+      <td>69</td>
+      <td>72</td>
+      <td>78</td>
+      <td>80</td>
+      <td>74</td>
+      <td>67</td>
+      <td>7</td>
+      <td>13</td>
+      <td>10</td>
+      <td>11</td>
+      <td>5</td>
+      <td>72</td>
+      <td>31</td>
+      <td>73</td>
+      <td>58</td>
+      <td>73</td>
+      <td>26</td>
+      <td>77</td>
+      <td>78</td>
+      <td>78</td>
+      <td>75</td>
+      <td>80</td>
+      <td>29</td>
+      <td>92</td>
+      <td>72</td>
+      <td>28</td>
+      <td>71</td>
+      <td>66</td>
+      <td>74</td>
+      <td>76.0</td>
+      <td>48.0</td>
+      <td>53.0</td>
+      <td>78.0</td>
+      <td>68.0</td>
+      <td>198329</td>
+      <td>76.0</td>
+      <td>56.0</td>
+      <td>48.0</td>
+      <td>68.0</td>
+      <td>53.0</td>
+      <td>78.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>LW RW ST</td>
+      <td>76.0</td>
+      <td>56.0</td>
+      <td>48.0</td>
+      <td>68.0</td>
+      <td>53.0</td>
+      <td>78.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>77.0</td>
+    </tr>
+    <tr>
+      <th>868</th>
+      <td>Rodrigo</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/198329.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>81</td>
+      <td>Valencia CF</td>
+      <td>https://cdn.sofifa.org/24/18/teams/461.png</td>
+      <td>€13M</td>
+      <td>€36K</td>
+      <td>1938</td>
+      <td>89</td>
+      <td>52</td>
+      <td>81</td>
+      <td>68</td>
+      <td>78</td>
+      <td>69</td>
+      <td>72</td>
+      <td>78</td>
+      <td>80</td>
+      <td>74</td>
+      <td>67</td>
+      <td>7</td>
+      <td>13</td>
+      <td>10</td>
+      <td>11</td>
+      <td>5</td>
+      <td>72</td>
+      <td>31</td>
+      <td>73</td>
+      <td>58</td>
+      <td>73</td>
+      <td>26</td>
+      <td>77</td>
+      <td>78</td>
+      <td>78</td>
+      <td>75</td>
+      <td>80</td>
+      <td>29</td>
+      <td>92</td>
+      <td>72</td>
+      <td>28</td>
+      <td>71</td>
+      <td>66</td>
+      <td>74</td>
+      <td>76.0</td>
+      <td>48.0</td>
+      <td>53.0</td>
+      <td>78.0</td>
+      <td>68.0</td>
+      <td>198329</td>
+      <td>76.0</td>
+      <td>56.0</td>
+      <td>48.0</td>
+      <td>68.0</td>
+      <td>53.0</td>
+      <td>78.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>LW RW ST</td>
+      <td>76.0</td>
+      <td>56.0</td>
+      <td>48.0</td>
+      <td>68.0</td>
+      <td>53.0</td>
+      <td>78.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>78.0</td>
+      <td>59.0</td>
+      <td>77.0</td>
+    </tr>
+    <tr>
+      <th>876</th>
+      <td>Rúben Semedo</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/216778.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>78</td>
+      <td>85</td>
+      <td>Villarreal CF</td>
+      <td>https://cdn.sofifa.org/24/18/teams/483.png</td>
+      <td>€12.5M</td>
+      <td>€27K</td>
+      <td>1806</td>
+      <td>68</td>
+      <td>87</td>
+      <td>66</td>
+      <td>51</td>
+      <td>63</td>
+      <td>69</td>
+      <td>38</td>
+      <td>22</td>
+      <td>64</td>
+      <td>43</td>
+      <td>26</td>
+      <td>10</td>
+      <td>14</td>
+      <td>13</td>
+      <td>7</td>
+      <td>15</td>
+      <td>75</td>
+      <td>81</td>
+      <td>85</td>
+      <td>60</td>
+      <td>58</td>
+      <td>76</td>
+      <td>38</td>
+      <td>48</td>
+      <td>73</td>
+      <td>65</td>
+      <td>72</td>
+      <td>76</td>
+      <td>75</td>
+      <td>77</td>
+      <td>78</td>
+      <td>83</td>
+      <td>48</td>
+      <td>51</td>
+      <td>60.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>60.0</td>
+      <td>63.0</td>
+      <td>216778</td>
+      <td>60.0</td>
+      <td>71.0</td>
+      <td>77.0</td>
+      <td>63.0</td>
+      <td>72.0</td>
+      <td>60.0</td>
+      <td>60.0</td>
+      <td>62.0</td>
+      <td>59.0</td>
+      <td>69.0</td>
+      <td>CB</td>
+      <td>60.0</td>
+      <td>71.0</td>
+      <td>77.0</td>
+      <td>63.0</td>
+      <td>72.0</td>
+      <td>60.0</td>
+      <td>60.0</td>
+      <td>62.0</td>
+      <td>59.0</td>
+      <td>69.0</td>
+      <td>62.0</td>
+    </tr>
+    <tr>
+      <th>718</th>
+      <td>Rúben Semedo</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/216778.png</td>
+      <td>Portugal</td>
+      <td>https://cdn.sofifa.org/flags/38.png</td>
+      <td>78</td>
+      <td>85</td>
+      <td>Villarreal CF</td>
+      <td>https://cdn.sofifa.org/24/18/teams/483.png</td>
+      <td>€12.5M</td>
+      <td>€27K</td>
+      <td>1806</td>
+      <td>68</td>
+      <td>87</td>
+      <td>66</td>
+      <td>51</td>
+      <td>63</td>
+      <td>69</td>
+      <td>38</td>
+      <td>22</td>
+      <td>64</td>
+      <td>43</td>
+      <td>26</td>
+      <td>10</td>
+      <td>14</td>
+      <td>13</td>
+      <td>7</td>
+      <td>15</td>
+      <td>75</td>
+      <td>81</td>
+      <td>85</td>
+      <td>60</td>
+      <td>58</td>
+      <td>76</td>
+      <td>38</td>
+      <td>48</td>
+      <td>73</td>
+      <td>65</td>
+      <td>72</td>
+      <td>76</td>
+      <td>75</td>
+      <td>77</td>
+      <td>78</td>
+      <td>83</td>
+      <td>48</td>
+      <td>51</td>
+      <td>60.0</td>
+      <td>77.0</td>
+      <td>72.0</td>
+      <td>60.0</td>
+      <td>63.0</td>
+      <td>216778</td>
+      <td>60.0</td>
+      <td>71.0</td>
+      <td>77.0</td>
+      <td>63.0</td>
+      <td>72.0</td>
+      <td>60.0</td>
+      <td>60.0</td>
+      <td>62.0</td>
+      <td>59.0</td>
+      <td>69.0</td>
+      <td>CB</td>
+      <td>60.0</td>
+      <td>71.0</td>
+      <td>77.0</td>
+      <td>63.0</td>
+      <td>72.0</td>
+      <td>60.0</td>
+      <td>60.0</td>
+      <td>62.0</td>
+      <td>59.0</td>
+      <td>69.0</td>
+      <td>62.0</td>
+    </tr>
+    <tr>
+      <th>832</th>
+      <td>Sergi Darder</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/202648.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>84</td>
+      <td>RCD Espanyol</td>
+      <td>https://cdn.sofifa.org/24/18/teams/452.png</td>
+      <td>€14M</td>
+      <td>€54K</td>
+      <td>1922</td>
+      <td>59</td>
+      <td>71</td>
+      <td>76</td>
+      <td>77</td>
+      <td>82</td>
+      <td>81</td>
+      <td>65</td>
+      <td>67</td>
+      <td>77</td>
+      <td>56</td>
+      <td>55</td>
+      <td>7</td>
+      <td>10</td>
+      <td>6</td>
+      <td>14</td>
+      <td>6</td>
+      <td>50</td>
+      <td>69</td>
+      <td>53</td>
+      <td>80</td>
+      <td>67</td>
+      <td>62</td>
+      <td>55</td>
+      <td>74</td>
+      <td>76</td>
+      <td>82</td>
+      <td>74</td>
+      <td>69</td>
+      <td>51</td>
+      <td>62</td>
+      <td>66</td>
+      <td>68</td>
+      <td>82</td>
+      <td>54</td>
+      <td>76.0</td>
+      <td>66.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>202648</td>
+      <td>76.0</td>
+      <td>67.0</td>
+      <td>66.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>67.0</td>
+      <td>72.0</td>
+      <td>69.0</td>
+      <td>CM</td>
+      <td>76.0</td>
+      <td>67.0</td>
+      <td>66.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>67.0</td>
+      <td>72.0</td>
+      <td>69.0</td>
+      <td>67.0</td>
+    </tr>
+    <tr>
+      <th>768</th>
+      <td>Sergi Darder</td>
+      <td>23</td>
+      <td>https://cdn.sofifa.org/48/18/players/202648.png</td>
+      <td>Spain</td>
+      <td>https://cdn.sofifa.org/flags/45.png</td>
+      <td>78</td>
+      <td>84</td>
+      <td>RCD Espanyol</td>
+      <td>https://cdn.sofifa.org/24/18/teams/452.png</td>
+      <td>€14M</td>
+      <td>€54K</td>
+      <td>1922</td>
+      <td>59</td>
+      <td>71</td>
+      <td>76</td>
+      <td>77</td>
+      <td>82</td>
+      <td>81</td>
+      <td>65</td>
+      <td>67</td>
+      <td>77</td>
+      <td>56</td>
+      <td>55</td>
+      <td>7</td>
+      <td>10</td>
+      <td>6</td>
+      <td>14</td>
+      <td>6</td>
+      <td>50</td>
+      <td>69</td>
+      <td>53</td>
+      <td>80</td>
+      <td>67</td>
+      <td>62</td>
+      <td>55</td>
+      <td>74</td>
+      <td>76</td>
+      <td>82</td>
+      <td>74</td>
+      <td>69</td>
+      <td>51</td>
+      <td>62</td>
+      <td>66</td>
+      <td>68</td>
+      <td>82</td>
+      <td>54</td>
+      <td>76.0</td>
+      <td>66.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>202648</td>
+      <td>76.0</td>
+      <td>67.0</td>
+      <td>66.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>67.0</td>
+      <td>72.0</td>
+      <td>69.0</td>
+      <td>CM</td>
+      <td>76.0</td>
+      <td>67.0</td>
+      <td>66.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>67.0</td>
+      <td>72.0</td>
+      <td>69.0</td>
+      <td>67.0</td>
+    </tr>
+    <tr>
+      <th>739</th>
+      <td>Tiago Volpi</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/209307.png</td>
+      <td>Brazil</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>78</td>
+      <td>80</td>
+      <td>Querétaro</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110150.png</td>
+      <td>€8.5M</td>
+      <td>€11K</td>
+      <td>1376</td>
+      <td>59</td>
+      <td>24</td>
+      <td>63</td>
+      <td>47</td>
+      <td>24</td>
+      <td>50</td>
+      <td>20</td>
+      <td>65</td>
+      <td>16</td>
+      <td>14</td>
+      <td>60</td>
+      <td>83</td>
+      <td>69</td>
+      <td>62</td>
+      <td>77</td>
+      <td>82</td>
+      <td>13</td>
+      <td>15</td>
+      <td>72</td>
+      <td>26</td>
+      <td>14</td>
+      <td>17</td>
+      <td>21</td>
+      <td>10</td>
+      <td>75</td>
+      <td>31</td>
+      <td>70</td>
+      <td>12</td>
+      <td>58</td>
+      <td>36</td>
+      <td>10</td>
+      <td>72</td>
+      <td>39</td>
+      <td>20</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>209307</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>834</th>
+      <td>Tiago Volpi</td>
+      <td>26</td>
+      <td>https://cdn.sofifa.org/48/18/players/209307.png</td>
+      <td>Brazil</td>
+      <td>https://cdn.sofifa.org/flags/54.png</td>
+      <td>78</td>
+      <td>80</td>
+      <td>Querétaro</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110150.png</td>
+      <td>€8.5M</td>
+      <td>€11K</td>
+      <td>1376</td>
+      <td>59</td>
+      <td>24</td>
+      <td>63</td>
+      <td>47</td>
+      <td>24</td>
+      <td>50</td>
+      <td>20</td>
+      <td>65</td>
+      <td>16</td>
+      <td>14</td>
+      <td>60</td>
+      <td>83</td>
+      <td>69</td>
+      <td>62</td>
+      <td>77</td>
+      <td>82</td>
+      <td>13</td>
+      <td>15</td>
+      <td>72</td>
+      <td>26</td>
+      <td>14</td>
+      <td>17</td>
+      <td>21</td>
+      <td>10</td>
+      <td>75</td>
+      <td>31</td>
+      <td>70</td>
+      <td>12</td>
+      <td>58</td>
+      <td>36</td>
+      <td>10</td>
+      <td>72</td>
+      <td>39</td>
+      <td>20</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>209307</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>GK</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>787</th>
+      <td>V. Aboubakar</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/199069.png</td>
+      <td>Cameroon</td>
+      <td>https://cdn.sofifa.org/flags/103.png</td>
+      <td>78</td>
+      <td>82</td>
+      <td>FC Porto</td>
+      <td>https://cdn.sofifa.org/24/18/teams/236.png</td>
+      <td>€13.5M</td>
+      <td>€17K</td>
+      <td>1910</td>
+      <td>77</td>
+      <td>77</td>
+      <td>75</td>
+      <td>63</td>
+      <td>79</td>
+      <td>77</td>
+      <td>57</td>
+      <td>69</td>
+      <td>80</td>
+      <td>74</td>
+      <td>67</td>
+      <td>8</td>
+      <td>10</td>
+      <td>9</td>
+      <td>7</td>
+      <td>8</td>
+      <td>77</td>
+      <td>33</td>
+      <td>78</td>
+      <td>68</td>
+      <td>76</td>
+      <td>12</td>
+      <td>76</td>
+      <td>76</td>
+      <td>75</td>
+      <td>74</td>
+      <td>78</td>
+      <td>19</td>
+      <td>83</td>
+      <td>77</td>
+      <td>23</td>
+      <td>83</td>
+      <td>72</td>
+      <td>70</td>
+      <td>76.0</td>
+      <td>48.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>70.0</td>
+      <td>199069</td>
+      <td>76.0</td>
+      <td>51.0</td>
+      <td>48.0</td>
+      <td>70.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>54.0</td>
+      <td>ST</td>
+      <td>76.0</td>
+      <td>51.0</td>
+      <td>48.0</td>
+      <td>70.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+    </tr>
+    <tr>
+      <th>836</th>
+      <td>V. Aboubakar</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/199069.png</td>
+      <td>Cameroon</td>
+      <td>https://cdn.sofifa.org/flags/103.png</td>
+      <td>78</td>
+      <td>82</td>
+      <td>FC Porto</td>
+      <td>https://cdn.sofifa.org/24/18/teams/236.png</td>
+      <td>€13.5M</td>
+      <td>€17K</td>
+      <td>1910</td>
+      <td>77</td>
+      <td>77</td>
+      <td>75</td>
+      <td>63</td>
+      <td>79</td>
+      <td>77</td>
+      <td>57</td>
+      <td>69</td>
+      <td>80</td>
+      <td>74</td>
+      <td>67</td>
+      <td>8</td>
+      <td>10</td>
+      <td>9</td>
+      <td>7</td>
+      <td>8</td>
+      <td>77</td>
+      <td>33</td>
+      <td>78</td>
+      <td>68</td>
+      <td>76</td>
+      <td>12</td>
+      <td>76</td>
+      <td>76</td>
+      <td>75</td>
+      <td>74</td>
+      <td>78</td>
+      <td>19</td>
+      <td>83</td>
+      <td>77</td>
+      <td>23</td>
+      <td>83</td>
+      <td>72</td>
+      <td>70</td>
+      <td>76.0</td>
+      <td>48.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>70.0</td>
+      <td>199069</td>
+      <td>76.0</td>
+      <td>51.0</td>
+      <td>48.0</td>
+      <td>70.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>54.0</td>
+      <td>ST</td>
+      <td>76.0</td>
+      <td>51.0</td>
+      <td>48.0</td>
+      <td>70.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>54.0</td>
+      <td>77.0</td>
+    </tr>
+    <tr>
+      <th>770</th>
+      <td>V. Eysseric</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/201878.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>78</td>
+      <td>80</td>
+      <td>Fiorentina</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110374.png</td>
+      <td>€12.5M</td>
+      <td>€64K</td>
+      <td>1941</td>
+      <td>72</td>
+      <td>66</td>
+      <td>76</td>
+      <td>67</td>
+      <td>79</td>
+      <td>72</td>
+      <td>82</td>
+      <td>76</td>
+      <td>79</td>
+      <td>77</td>
+      <td>78</td>
+      <td>9</td>
+      <td>13</td>
+      <td>10</td>
+      <td>11</td>
+      <td>8</td>
+      <td>52</td>
+      <td>34</td>
+      <td>58</td>
+      <td>78</td>
+      <td>79</td>
+      <td>46</td>
+      <td>71</td>
+      <td>78</td>
+      <td>73</td>
+      <td>79</td>
+      <td>78</td>
+      <td>26</td>
+      <td>72</td>
+      <td>66</td>
+      <td>33</td>
+      <td>64</td>
+      <td>79</td>
+      <td>72</td>
+      <td>78.0</td>
+      <td>49.0</td>
+      <td>59.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>201878</td>
+      <td>78.0</td>
+      <td>55.0</td>
+      <td>49.0</td>
+      <td>73.0</td>
+      <td>59.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>60.0</td>
+      <td>LM CAM LW RW</td>
+      <td>78.0</td>
+      <td>55.0</td>
+      <td>49.0</td>
+      <td>73.0</td>
+      <td>59.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>60.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>831</th>
+      <td>V. Eysseric</td>
+      <td>25</td>
+      <td>https://cdn.sofifa.org/48/18/players/201878.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>78</td>
+      <td>80</td>
+      <td>Fiorentina</td>
+      <td>https://cdn.sofifa.org/24/18/teams/110374.png</td>
+      <td>€12.5M</td>
+      <td>€64K</td>
+      <td>1941</td>
+      <td>72</td>
+      <td>66</td>
+      <td>76</td>
+      <td>67</td>
+      <td>79</td>
+      <td>72</td>
+      <td>82</td>
+      <td>76</td>
+      <td>79</td>
+      <td>77</td>
+      <td>78</td>
+      <td>9</td>
+      <td>13</td>
+      <td>10</td>
+      <td>11</td>
+      <td>8</td>
+      <td>52</td>
+      <td>34</td>
+      <td>58</td>
+      <td>78</td>
+      <td>79</td>
+      <td>46</td>
+      <td>71</td>
+      <td>78</td>
+      <td>73</td>
+      <td>79</td>
+      <td>78</td>
+      <td>26</td>
+      <td>72</td>
+      <td>66</td>
+      <td>33</td>
+      <td>64</td>
+      <td>79</td>
+      <td>72</td>
+      <td>78.0</td>
+      <td>49.0</td>
+      <td>59.0</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>201878</td>
+      <td>78.0</td>
+      <td>55.0</td>
+      <td>49.0</td>
+      <td>73.0</td>
+      <td>59.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>60.0</td>
+      <td>LM CAM LW RW</td>
+      <td>78.0</td>
+      <td>55.0</td>
+      <td>49.0</td>
+      <td>73.0</td>
+      <td>59.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>78.0</td>
+      <td>60.0</td>
+      <td>74.0</td>
+    </tr>
+    <tr>
+      <th>857</th>
+      <td>V. Koziello</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/225199.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>78</td>
+      <td>85</td>
+      <td>OGC Nice</td>
+      <td>https://cdn.sofifa.org/24/18/teams/72.png</td>
+      <td>€14.5M</td>
+      <td>€28K</td>
+      <td>2076</td>
+      <td>78</td>
+      <td>85</td>
+      <td>86</td>
+      <td>88</td>
+      <td>79</td>
+      <td>78</td>
+      <td>73</td>
+      <td>72</td>
+      <td>76</td>
+      <td>66</td>
+      <td>54</td>
+      <td>14</td>
+      <td>9</td>
+      <td>14</td>
+      <td>12</td>
+      <td>8</td>
+      <td>49</td>
+      <td>77</td>
+      <td>62</td>
+      <td>74</td>
+      <td>59</td>
+      <td>75</td>
+      <td>60</td>
+      <td>77</td>
+      <td>76</td>
+      <td>81</td>
+      <td>65</td>
+      <td>71</td>
+      <td>75</td>
+      <td>75</td>
+      <td>77</td>
+      <td>66</td>
+      <td>80</td>
+      <td>63</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>225199</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>70.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>CDM CM</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>70.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>70.0</td>
+    </tr>
+    <tr>
+      <th>701</th>
+      <td>V. Koziello</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/225199.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>78</td>
+      <td>85</td>
+      <td>OGC Nice</td>
+      <td>https://cdn.sofifa.org/24/18/teams/72.png</td>
+      <td>€14.5M</td>
+      <td>€28K</td>
+      <td>2076</td>
+      <td>78</td>
+      <td>85</td>
+      <td>86</td>
+      <td>88</td>
+      <td>79</td>
+      <td>78</td>
+      <td>73</td>
+      <td>72</td>
+      <td>76</td>
+      <td>66</td>
+      <td>54</td>
+      <td>14</td>
+      <td>9</td>
+      <td>14</td>
+      <td>12</td>
+      <td>8</td>
+      <td>49</td>
+      <td>77</td>
+      <td>62</td>
+      <td>74</td>
+      <td>59</td>
+      <td>75</td>
+      <td>60</td>
+      <td>77</td>
+      <td>76</td>
+      <td>81</td>
+      <td>65</td>
+      <td>71</td>
+      <td>75</td>
+      <td>75</td>
+      <td>77</td>
+      <td>66</td>
+      <td>80</td>
+      <td>63</td>
+      <td>77.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>77.0</td>
+      <td>225199</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>70.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>CDM CM</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>77.0</td>
+      <td>75.0</td>
+      <td>76.0</td>
+      <td>70.0</td>
+      <td>76.0</td>
+      <td>76.0</td>
+      <td>70.0</td>
+    </tr>
+    <tr>
+      <th>816</th>
+      <td>V. Rongier</td>
+      <td>22</td>
+      <td>https://cdn.sofifa.org/48/18/players/223874.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>78</td>
+      <td>84</td>
+      <td>FC Nantes</td>
+      <td>https://cdn.sofifa.org/24/18/teams/71.png</td>
+      <td>€14M</td>
+      <td>€24K</td>
+      <td>2024</td>
+      <td>69</td>
+      <td>51</td>
+      <td>79</td>
+      <td>91</td>
+      <td>80</td>
+      <td>75</td>
+      <td>62</td>
+      <td>76</td>
+      <td>79</td>
+      <td>65</td>
+      <td>64</td>
+      <td>11</td>
+      <td>8</td>
+      <td>12</td>
+      <td>7</td>
+      <td>11</td>
+      <td>41</td>
+      <td>72</td>
+      <td>72</td>
+      <td>78</td>
+      <td>78</td>
+      <td>75</td>
+      <td>65</td>
+      <td>71</td>
+      <td>72</td>
+      <td>80</td>
+      <td>74</td>
+      <td>70</td>
+      <td>55</td>
+      <td>71</td>
+      <td>82</td>
+      <td>55</td>
+      <td>75</td>
+      <td>73</td>
+      <td>75.0</td>
+      <td>68.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>223874</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>68.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>68.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>CDM CM</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>68.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>68.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>68.0</td>
+    </tr>
+    <tr>
+      <th>703</th>
+      <td>V. Rongier</td>
+      <td>22</td>
+      <td>https://cdn.sofifa.org/48/18/players/223874.png</td>
+      <td>France</td>
+      <td>https://cdn.sofifa.org/flags/18.png</td>
+      <td>78</td>
+      <td>84</td>
+      <td>FC Nantes</td>
+      <td>https://cdn.sofifa.org/24/18/teams/71.png</td>
+      <td>€14M</td>
+      <td>€24K</td>
+      <td>2024</td>
+      <td>69</td>
+      <td>51</td>
+      <td>79</td>
+      <td>91</td>
+      <td>80</td>
+      <td>75</td>
+      <td>62</td>
+      <td>76</td>
+      <td>79</td>
+      <td>65</td>
+      <td>64</td>
+      <td>11</td>
+      <td>8</td>
+      <td>12</td>
+      <td>7</td>
+      <td>11</td>
+      <td>41</td>
+      <td>72</td>
+      <td>72</td>
+      <td>78</td>
+      <td>78</td>
+      <td>75</td>
+      <td>65</td>
+      <td>71</td>
+      <td>72</td>
+      <td>80</td>
+      <td>74</td>
+      <td>70</td>
+      <td>55</td>
+      <td>71</td>
+      <td>82</td>
+      <td>55</td>
+      <td>75</td>
+      <td>73</td>
+      <td>75.0</td>
+      <td>68.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>77.0</td>
+      <td>223874</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>68.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>68.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>CDM CM</td>
+      <td>75.0</td>
+      <td>71.0</td>
+      <td>68.0</td>
+      <td>77.0</td>
+      <td>74.0</td>
+      <td>73.0</td>
+      <td>73.0</td>
+      <td>68.0</td>
+      <td>73.0</td>
+      <td>72.0</td>
+      <td>68.0</td>
+    </tr>
+  </tbody>
+</table>
+<p>104 rows × 74 columns</p>
+</div>
+
+
+
+There are 52 duplicates rows, with all their field identical
+
+Aditionally, we will check other duplicates based on player names (checking also the age, nacionality and club)
+
+
+```python
+df_players_nodup = df_players.drop_duplicates()
+df_players_nodup[df_players_nodup.duplicated(['Name','Age','Nationality','Club'],keep=False)] \
+    .sort_values(by=['Name','Age','Nationality','Club'])
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Name</th>
+      <th>Age</th>
+      <th>Photo</th>
+      <th>Nationality</th>
+      <th>Flag</th>
+      <th>Overall</th>
+      <th>Potential</th>
+      <th>Club</th>
+      <th>Club Logo</th>
+      <th>Value</th>
+      <th>Wage</th>
+      <th>Special</th>
+      <th>Acceleration</th>
+      <th>Aggression</th>
+      <th>Agility</th>
+      <th>Balance</th>
+      <th>Ball control</th>
+      <th>Composure</th>
+      <th>Crossing</th>
+      <th>Curve</th>
+      <th>Dribbling</th>
+      <th>Finishing</th>
+      <th>Free kick accuracy</th>
+      <th>GK diving</th>
+      <th>GK handling</th>
+      <th>GK kicking</th>
+      <th>GK positioning</th>
+      <th>GK reflexes</th>
+      <th>Heading accuracy</th>
+      <th>Interceptions</th>
+      <th>Jumping</th>
+      <th>Long passing</th>
+      <th>Long shots</th>
+      <th>Marking</th>
+      <th>Penalties</th>
+      <th>Positioning</th>
+      <th>Reactions</th>
+      <th>Short passing</th>
+      <th>Shot power</th>
+      <th>Sliding tackle</th>
+      <th>Sprint speed</th>
+      <th>Stamina</th>
+      <th>Standing tackle</th>
+      <th>Strength</th>
+      <th>Vision</th>
+      <th>Volleys</th>
+      <th>CAM</th>
+      <th>CB</th>
+      <th>CDM</th>
+      <th>CF</th>
+      <th>CM</th>
+      <th>ID</th>
+      <th>LAM</th>
+      <th>LB</th>
+      <th>LCB</th>
+      <th>LCM</th>
+      <th>LDM</th>
+      <th>LF</th>
+      <th>LM</th>
+      <th>LS</th>
+      <th>LW</th>
+      <th>LWB</th>
+      <th>Preferred Positions</th>
+      <th>RAM</th>
+      <th>RB</th>
+      <th>RCB</th>
+      <th>RCM</th>
+      <th>RDM</th>
+      <th>RF</th>
+      <th>RM</th>
+      <th>RS</th>
+      <th>RW</th>
+      <th>RWB</th>
+      <th>ST</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>8306</th>
+      <td>A. Ajeti</td>
+      <td>20</td>
+      <td>https://cdn.sofifa.org/48/18/players/222352.png</td>
+      <td>Switzerland</td>
+      <td>https://cdn.sofifa.org/flags/47.png</td>
+      <td>67</td>
+      <td>74</td>
+      <td>FC St. Gallen</td>
+      <td>https://cdn.sofifa.org/24/18/teams/898.png</td>
+      <td>€1.1M</td>
+      <td>€9K</td>
+      <td>1590</td>
+      <td>76</td>
+      <td>29</td>
+      <td>67</td>
+      <td>62</td>
+      <td>66</td>
+      <td>74</td>
+      <td>57</td>
+      <td>46</td>
+      <td>65</td>
+      <td>66</td>
+      <td>33</td>
+      <td>13</td>
+      <td>9</td>
+      <td>6</td>
+      <td>12</td>
+      <td>16</td>
+      <td>66</td>
+      <td>16</td>
+      <td>83</td>
+      <td>41</td>
+      <td>56</td>
+      <td>19</td>
+      <td>56</td>
+      <td>69</td>
+      <td>65</td>
+      <td>45</td>
+      <td>63</td>
+      <td>17</td>
+      <td>82</td>
+      <td>64</td>
+      <td>19</td>
+      <td>80</td>
+      <td>61</td>
+      <td>65</td>
+      <td>61.0</td>
+      <td>39.0</td>
+      <td>40.0</td>
+      <td>65.0</td>
+      <td>53.0</td>
+      <td>222352</td>
+      <td>61.0</td>
+      <td>43.0</td>
+      <td>39.0</td>
+      <td>53.0</td>
+      <td>40.0</td>
+      <td>65.0</td>
+      <td>63.0</td>
+      <td>66.0</td>
+      <td>64.0</td>
+      <td>45.0</td>
+      <td>RM CF ST</td>
+      <td>61.0</td>
+      <td>43.0</td>
+      <td>39.0</td>
+      <td>53.0</td>
+      <td>40.0</td>
+      <td>65.0</td>
+      <td>63.0</td>
+      <td>66.0</td>
+      <td>64.0</td>
+      <td>45.0</td>
+      <td>66.0</td>
+    </tr>
+    <tr>
+      <th>17054</th>
+      <td>A. Ajeti</td>
+      <td>20</td>
+      <td>https://cdn.sofifa.org/48/18/players/239427.png</td>
+      <td>Switzerland</td>
+      <td>https://cdn.sofifa.org/flags/47.png</td>
+      <td>54</td>
+      <td>61</td>
+      <td>FC St. Gallen</td>
+      <td>https://cdn.sofifa.org/24/18/teams/898.png</td>
+      <td>€80K</td>
+      <td>€1K</td>
+      <td>1120</td>
+      <td>38</td>
+      <td>63</td>
+      <td>44</td>
+      <td>32</td>
+      <td>29</td>
+      <td>50</td>
+      <td>25</td>
+      <td>18</td>
+      <td>24</td>
+      <td>23</td>
+      <td>24</td>
+      <td>14</td>
+      <td>13</td>
+      <td>10</td>
+      <td>9</td>
+      <td>10</td>
+      <td>59</td>
+      <td>46</td>
+      <td>46</td>
+      <td>29</td>
+      <td>22</td>
+      <td>48</td>
+      <td>36</td>
+      <td>14</td>
+      <td>45</td>
+      <td>31</td>
+      <td>42</td>
+      <td>62</td>
+      <td>50</td>
+      <td>47</td>
+      <td>58</td>
+      <td>63</td>
+      <td>19</td>
+      <td>27</td>
+      <td>28.0</td>
+      <td>53.0</td>
+      <td>43.0</td>
+      <td>29.0</td>
+      <td>31.0</td>
+      <td>239427</td>
+      <td>28.0</td>
+      <td>46.0</td>
+      <td>53.0</td>
+      <td>31.0</td>
+      <td>43.0</td>
+      <td>29.0</td>
+      <td>30.0</td>
+      <td>34.0</td>
+      <td>29.0</td>
+      <td>43.0</td>
+      <td>CB</td>
+      <td>28.0</td>
+      <td>46.0</td>
+      <td>53.0</td>
+      <td>31.0</td>
+      <td>43.0</td>
+      <td>29.0</td>
+      <td>30.0</td>
+      <td>34.0</td>
+      <td>29.0</td>
+      <td>43.0</td>
+      <td>34.0</td>
+    </tr>
+    <tr>
+      <th>2214</th>
+      <td>A. Miranchuk</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/214092.png</td>
+      <td>Russia</td>
+      <td>https://cdn.sofifa.org/flags/40.png</td>
+      <td>74</td>
+      <td>81</td>
+      <td>Lokomotiv Moscow</td>
+      <td>https://cdn.sofifa.org/24/18/teams/100765.png</td>
+      <td>€8M</td>
+      <td>€30K</td>
+      <td>1762</td>
+      <td>71</td>
+      <td>43</td>
+      <td>77</td>
+      <td>67</td>
+      <td>73</td>
+      <td>67</td>
+      <td>65</td>
+      <td>64</td>
+      <td>76</td>
+      <td>70</td>
+      <td>53</td>
+      <td>8</td>
+      <td>8</td>
+      <td>9</td>
+      <td>12</td>
+      <td>15</td>
+      <td>53</td>
+      <td>36</td>
+      <td>58</td>
+      <td>71</td>
+      <td>68</td>
+      <td>22</td>
+      <td>57</td>
+      <td>66</td>
+      <td>68</td>
+      <td>75</td>
+      <td>65</td>
+      <td>29</td>
+      <td>75</td>
+      <td>74</td>
+      <td>28</td>
+      <td>68</td>
+      <td>76</td>
+      <td>62</td>
+      <td>73.0</td>
+      <td>44.0</td>
+      <td>54.0</td>
+      <td>71.0</td>
+      <td>69.0</td>
+      <td>214092</td>
+      <td>73.0</td>
+      <td>52.0</td>
+      <td>44.0</td>
+      <td>69.0</td>
+      <td>54.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>68.0</td>
+      <td>72.0</td>
+      <td>56.0</td>
+      <td>ST CAM</td>
+      <td>73.0</td>
+      <td>52.0</td>
+      <td>44.0</td>
+      <td>69.0</td>
+      <td>54.0</td>
+      <td>71.0</td>
+      <td>72.0</td>
+      <td>68.0</td>
+      <td>72.0</td>
+      <td>56.0</td>
+      <td>68.0</td>
+    </tr>
+    <tr>
+      <th>7324</th>
+      <td>A. Miranchuk</td>
+      <td>21</td>
+      <td>https://cdn.sofifa.org/48/18/players/222368.png</td>
+      <td>Russia</td>
+      <td>https://cdn.sofifa.org/flags/40.png</td>
+      <td>68</td>
+      <td>77</td>
+      <td>Lokomotiv Moscow</td>
+      <td>https://cdn.sofifa.org/24/18/teams/100765.png</td>
+      <td>€1.4M</td>
+      <td>€18K</td>
+      <td>1642</td>
+      <td>66</td>
+      <td>31</td>
+      <td>69</td>
+      <td>70</td>
+      <td>68</td>
+      <td>64</td>
+      <td>62</td>
+      <td>58</td>
+      <td>72</td>
+      <td>61</td>
+      <td>43</td>
+      <td>8</td>
+      <td>6</td>
+      <td>11</td>
+      <td>12</td>
+      <td>16</td>
+      <td>44</td>
+      <td>22</td>
+      <td>49</td>
+      <td>63</td>
+      <td>60</td>
+      <td>25</td>
+      <td>71</td>
+      <td>63</td>
+      <td>72</td>
+      <td>67</td>
+      <td>66</td>
+      <td>31</td>
+      <td>74</td>
+      <td>72</td>
+      <td>30</td>
+      <td>68</td>
+      <td>66</td>
+      <td>46</td>
+      <td>67.0</td>
+      <td>41.0</td>
+      <td>49.0</td>
+      <td>67.0</td>
+      <td>63.0</td>
+      <td>222368</td>
+      <td>67.0</td>
+      <td>49.0</td>
+      <td>41.0</td>
+      <td>63.0</td>
+      <td>49.0</td>
+      <td>67.0</td>
+      <td>67.0</td>
+      <td>64.0</td>
+      <td>67.0</td>
+      <td>53.0</td>
+      <td>CAM</td>
+      <td>67.0</td>
+      <td>49.0</td>
+      <td>41.0</td>
+      <td>63.0</td>
+      <td>49.0</td>
+      <td>67.0</td>
+      <td>67.0</td>
+      <td>64.0</td>
+      <td>67.0</td>
+      <td>53.0</td>
+      <td>64.0</td>
+    </tr>
+    <tr>
+      <th>14380</th>
+      <td>D. Kelly-Evans</td>
+      <td>20</td>
+      <td>https://cdn.sofifa.org/48/18/players/226056.png</td>
+      <td>England</td>
+      <td>https://cdn.sofifa.org/flags/14.png</td>
+      <td>60</td>
+      <td>74</td>
+      <td>Coventry City</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1800.png</td>
+      <td>€400K</td>
+      <td>€2K</td>
+      <td>1624</td>
+      <td>84</td>
+      <td>85</td>
+      <td>80</td>
+      <td>80</td>
+      <td>58</td>
+      <td>52</td>
+      <td>51</td>
+      <td>31</td>
+      <td>56</td>
+      <td>36</td>
+      <td>39</td>
+      <td>7</td>
+      <td>8</td>
+      <td>10</td>
+      <td>6</td>
+      <td>8</td>
+      <td>48</td>
+      <td>54</td>
+      <td>86</td>
+      <td>48</td>
+      <td>38</td>
+      <td>50</td>
+      <td>52</td>
+      <td>46</td>
+      <td>55</td>
+      <td>52</td>
+      <td>54</td>
+      <td>61</td>
+      <td>83</td>
+      <td>64</td>
+      <td>57</td>
+      <td>62</td>
+      <td>40</td>
+      <td>35</td>
+      <td>52.0</td>
+      <td>59.0</td>
+      <td>56.0</td>
+      <td>53.0</td>
+      <td>51.0</td>
+      <td>226056</td>
+      <td>52.0</td>
+      <td>59.0</td>
+      <td>59.0</td>
+      <td>51.0</td>
+      <td>56.0</td>
+      <td>53.0</td>
+      <td>56.0</td>
+      <td>52.0</td>
+      <td>55.0</td>
+      <td>59.0</td>
+      <td>RWB RB</td>
+      <td>52.0</td>
+      <td>59.0</td>
+      <td>59.0</td>
+      <td>51.0</td>
+      <td>56.0</td>
+      <td>53.0</td>
+      <td>56.0</td>
+      <td>52.0</td>
+      <td>55.0</td>
+      <td>59.0</td>
+      <td>52.0</td>
+    </tr>
+    <tr>
+      <th>16391</th>
+      <td>D. Kelly-Evans</td>
+      <td>20</td>
+      <td>https://cdn.sofifa.org/48/18/players/226055.png</td>
+      <td>England</td>
+      <td>https://cdn.sofifa.org/flags/14.png</td>
+      <td>56</td>
+      <td>71</td>
+      <td>Coventry City</td>
+      <td>https://cdn.sofifa.org/24/18/teams/1800.png</td>
+      <td>€200K</td>
+      <td>€2K</td>
+      <td>1512</td>
+      <td>83</td>
+      <td>82</td>
+      <td>77</td>
+      <td>66</td>
+      <td>46</td>
+      <td>58</td>
+      <td>54</td>
+      <td>44</td>
+      <td>59</td>
+      <td>43</td>
+      <td>40</td>
+      <td>12</td>
+      <td>8</td>
+      <td>8</td>
+      <td>10</td>
+      <td>9</td>
+      <td>28</td>
+      <td>38</td>
+      <td>81</td>
+      <td>48</td>
+      <td>32</td>
+      <td>34</td>
+      <td>55</td>
+      <td>49</td>
+      <td>36</td>
+      <td>53</td>
+      <td>57</td>
+      <td>34</td>
+      <td>84</td>
+      <td>47</td>
+      <td>37</td>
+      <td>57</td>
+      <td>55</td>
+      <td>46</td>
+      <td>52.0</td>
+      <td>44.0</td>
+      <td>45.0</td>
+      <td>52.0</td>
+      <td>48.0</td>
+      <td>226055</td>
+      <td>52.0</td>
+      <td>46.0</td>
+      <td>44.0</td>
+      <td>48.0</td>
+      <td>45.0</td>
+      <td>52.0</td>
+      <td>55.0</td>
+      <td>49.0</td>
+      <td>54.0</td>
+      <td>47.0</td>
+      <td>CAM LM</td>
+      <td>52.0</td>
+      <td>46.0</td>
+      <td>44.0</td>
+      <td>48.0</td>
+      <td>45.0</td>
+      <td>52.0</td>
+      <td>55.0</td>
+      <td>49.0</td>
+      <td>54.0</td>
+      <td>47.0</td>
+      <td>49.0</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+These rows are players with the same surname, but they are different players
+
+## Clean dataset based on the information from the previous analysis
+
+1) Clean duplicated rows (52)
+
+2) Remove players without 'Club' information (free agents) as they have also 'Value' equal to 0 €
+
+3) Transform variables 'Value' & 'Wage' from string to numeric type:
+    * Transform: M // x 1.000.000
+    * Transform: K // x 1.000 
+    * Remove: €, M, K
+
+4) Transform 'Preferred Positions' field into a single value. Keep only the first position
+    
+5) Remove variables with a high percentaje of missing / extreme values / correlated:
+    * CAM, CB, CDM, CF, CM, LAM, LB, LCB, LCM, LDM, LF, LM, LS, LW, LWB, RAM, RB, RCB, RCM, RDM, RF, RM, RS, RW, RWB, ST
+** These variables are correlated with "Preferred Positions", when Preferred Positions = 'GK' // variables have a null value
+
+6) Remove variables with useless information:
+    * Photo, Flag, Club Logo
+
+7) Remove skill's variables, to reduce the number of variables
+    * To simplify the problem we will keep only 'Overall' and 'Potential' as skill's related info
+
+
+
+```python
+print(df_players.shape)
+# 1 - Duplicates
+df_players_processed = df_players.drop_duplicates()
+
+# 2 - Missing Club
+df_players_processed = df_players_processed[df_players_processed.Club.notnull()]
+
+# 3 - Transform variables from string to numeric
+df_players_processed['Value_num'] = pd.to_numeric(df_players_processed['Value'].\
+                                                  str.replace('€','').str.replace('K','').str.replace('M',''))
+df_players_processed['Value_mul'] = df_players_processed['Value'].str.replace('€','').str.replace('.','').str.replace('\d+', '')
+df_players_processed['Value_mul'] = pd.to_numeric(df_players_processed['Value_mul'].\
+                                                  str.replace('M','1000000').str.replace('K','1000')).fillna(1)
+df_players_processed['Value'] = (df_players_processed['Value_num'] * df_players_processed['Value_mul']).astype("int")
+df_players_processed = df_players_processed.drop(['Value_num','Value_mul'], axis=1)
+
+df_players_processed['Wage_num'] = pd.to_numeric(df_players_processed['Wage'].\
+                                                 str.replace('€','').str.replace('K','').str.replace('M',''))
+df_players_processed['Wage_mul'] = df_players_processed['Wage'].str.replace('€','').str.replace('.','').str.replace('\d+', '')
+df_players_processed['Wage_mul'] = pd.to_numeric(df_players_processed['Wage_mul'].\
+                                                 str.replace('M','1000000').str.replace('K','1000')).fillna(1)
+df_players_processed['Wage'] = (df_players_processed['Wage_num'] * df_players_processed['Wage_mul']).astype("int")
+df_players_processed = df_players_processed.drop(['Wage_num','Wage_mul'], axis=1)
+
+# 4 - Transform 'Preferred Positions' field
+df_players_processed['Preferred Positions'] = df_players_processed['Preferred Positions'].str.split(n=1,expand=False)
+df_players_processed['Preferred Position'] = df_players_processed['Preferred Positions'].str[0]
+
+# 5 - Remove variables (missings, extreme, correlated)
+df_players_processed.drop(["CAM","CB","CDM","CF","CM","LAM","LB","LCB","LCM","LDM","LF","LM","LS","LW","LWB","RAM","RB",\
+                           "RCB","RCM","RDM","RF","RM","RS","RW","RWB","ST"],axis=1,inplace=True)
+
+# 6 - Remove useless variables
+df_players_processed.drop(['Photo','Flag','Club Logo'],axis=1,inplace=True)
+
+# 7 - Reduce the number of variables
+df_players_processed = df_players_processed[["ID","Name","Age","Nationality","Overall","Potential",
+                                             "Club","Value","Wage","Preferred Position"]]
+
+print(df_players_processed.shape)
+df_players_processed.sort_values(by=['ID']).head()
+```
+
+    (17981, 74)
+    (17681, 10)
+
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Age</th>
+      <th>Nationality</th>
+      <th>Overall</th>
+      <th>Potential</th>
+      <th>Club</th>
+      <th>Value</th>
+      <th>Wage</th>
+      <th>Preferred Position</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>4920</th>
+      <td>16</td>
+      <td>Luis García</td>
+      <td>36</td>
+      <td>Spain</td>
+      <td>70</td>
+      <td>70</td>
+      <td>KAS Eupen</td>
+      <td>575000</td>
+      <td>7000</td>
+      <td>CAM</td>
+    </tr>
+    <tr>
+      <th>4963</th>
+      <td>28</td>
+      <td>Manu Herrera</td>
+      <td>35</td>
+      <td>Spain</td>
+      <td>70</td>
+      <td>70</td>
+      <td>CA Osasuna</td>
+      <td>425000</td>
+      <td>4000</td>
+      <td>GK</td>
+    </tr>
+    <tr>
+      <th>45</th>
+      <td>41</td>
+      <td>Iniesta</td>
+      <td>33</td>
+      <td>Spain</td>
+      <td>87</td>
+      <td>87</td>
+      <td>FC Barcelona</td>
+      <td>29500000</td>
+      <td>260000</td>
+      <td>LM</td>
+    </tr>
+    <tr>
+      <th>693</th>
+      <td>80</td>
+      <td>E. Belözoğlu</td>
+      <td>36</td>
+      <td>Turkey</td>
+      <td>79</td>
+      <td>79</td>
+      <td>İstanbul Başakşehir FK</td>
+      <td>4000000</td>
+      <td>26000</td>
+      <td>CDM</td>
+    </tr>
+    <tr>
+      <th>16121</th>
+      <td>591</td>
+      <td>C. Day</td>
+      <td>41</td>
+      <td>England</td>
+      <td>57</td>
+      <td>57</td>
+      <td>Stevenage</td>
+      <td>10000</td>
+      <td>1000</td>
+      <td>GK</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+## Join information about Languages associated to each country
+
+Extract data about country-languages, previously loaded into our Cloud SQL database
+
+
+```python
+df_languages = pd.read_sql('SELECT * FROM ea_countries_languages', con=database_connection)
+df_players = df_players_processed
+```
+
+
+```python
+df_languages_primary = df_languages[['country','language_0']].\
+    rename(columns = {'country':'Nationality','language_0':'Primary Language'})
+```
+
+
+```python
+df_player_lang=pd.merge(df_players, df_languages_primary, how='left', left_on=['Nationality'], right_on=['Nationality'])
+```
+
+
+```python
+df_player_lang.head()
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Age</th>
+      <th>Nationality</th>
+      <th>Overall</th>
+      <th>Potential</th>
+      <th>Club</th>
+      <th>Value</th>
+      <th>Wage</th>
+      <th>Preferred Position</th>
+      <th>Primary Language</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>20801</td>
+      <td>Cristiano Ronaldo</td>
+      <td>32</td>
+      <td>Portugal</td>
+      <td>94</td>
+      <td>94</td>
+      <td>Real Madrid CF</td>
+      <td>95500000</td>
+      <td>565000</td>
+      <td>ST</td>
+      <td>Portuguese</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>158023</td>
+      <td>L. Messi</td>
+      <td>30</td>
+      <td>Argentina</td>
+      <td>93</td>
+      <td>93</td>
+      <td>FC Barcelona</td>
+      <td>105000000</td>
+      <td>565000</td>
+      <td>RW</td>
+      <td>Spanish</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>190871</td>
+      <td>Neymar</td>
+      <td>25</td>
+      <td>Brazil</td>
+      <td>92</td>
+      <td>94</td>
+      <td>Paris Saint-Germain</td>
+      <td>123000000</td>
+      <td>280000</td>
+      <td>LW</td>
+      <td>Portuguese</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>176580</td>
+      <td>L. Suárez</td>
+      <td>30</td>
+      <td>Uruguay</td>
+      <td>92</td>
+      <td>92</td>
+      <td>FC Barcelona</td>
+      <td>97000000</td>
+      <td>510000</td>
+      <td>ST</td>
+      <td>Spanish</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>167495</td>
+      <td>M. Neuer</td>
+      <td>31</td>
+      <td>Germany</td>
+      <td>92</td>
+      <td>92</td>
+      <td>FC Bayern Munich</td>
+      <td>61000000</td>
+      <td>230000</td>
+      <td>GK</td>
+      <td>German</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+Check if all players have a primary language associated
+
+
+```python
+df_player_lang.isnull().sum()
+```
+
+
+
+
+    ID                       0
+    Name                     0
+    Age                      0
+    Nationality              0
+    Overall                  0
+    Potential                0
+    Club                     0
+    Value                    0
+    Wage                     0
+    Preferred Position       0
+    Primary Language      3086
+    dtype: int64
+
+
+
+Find 'Nationalities' associated to players without a 'Primary Language' identified
+
+
+```python
+df_player_lang[df_player_lang['Primary Language'].isnull()].Nationality.unique()
+```
+
+
+
+
+    array(['Wales', 'England', 'Bosnia Herzegovina', 'Korea Republic',
+           'DR Congo', 'Republic of Ireland', 'Northern Ireland', 'Scotland',
+           'FYR Macedonia', 'Guinea Bissau', 'Congo', 'Trinidad & Tobago',
+           'Korea DPR', 'Central African Rep.', 'St Kitts Nevis', 'China PR',
+           'Antigua & Barbuda', 'São Tomé & Príncipe', 'St Lucia',
+           'Brunei Darussalam'], dtype=object)
+
+
+
+Rename some nationalities based on the countries file:
+
+'Wales', 'England', 'Bosnia Herzegovina', 'Korea Republic', 'DR Congo', 'Republic of Ireland', 'Northern Ireland', 'Scotland',
+'FYR Macedonia', 'Guinea Bissau', 'Congo', 'Trinidad & Tobago', 'Korea DPR', 'Central African Rep.', 'St Kitts Nevis', 'China PR', 'Antigua & Barbuda', 'São Tomé & Príncipe', 'St Lucia', 'Brunei Darussalam'
+
+
+```python
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Wales$','United Kingdom')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^England$','United Kingdom')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Bosnia Herzegovina$','Bosnia and Herzegovina')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Korea Republic$','South Korea')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Republic of Ireland$','Ireland')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Northern Ireland$', 'United Kingdom')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Scotland$','United Kingdom')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^FYR Macedonia$','North Macedonia')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Guinea Bissau$','Guinea-Bissau')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Trinidad & Tobago$','Trinidad and Tobago')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Korea DPR$','North Korea')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Central African Rep.$','Central African Republic')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^St Kitts Nevis$','Saint Kitts and Nevis')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^China PR$','China')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Antigua & Barbuda$','Antigua and Barbuda')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^São Tomé & Príncipe$','São Tomé and Príncipe')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^St Lucia$','Saint Lucia')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Brunei Darussalam$','Brunei')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^Congo$','Republic of the Congo')
+df_players['Nationality'] = df_players['Nationality'].str.replace(r'^DR Congo$','Democratic Republic of the Congo')
+```
+
+
+```python
+df_player_lang=pd.merge(df_players, df_languages_primary, how='left', left_on=['Nationality'], right_on=['Nationality'])
+df_player_lang.isnull().sum()
+```
+
+
+
+
+    ID                    0
+    Name                  0
+    Age                   0
+    Nationality           0
+    Overall               0
+    Potential             0
+    Club                  0
+    Value                 0
+    Wage                  0
+    Preferred Position    0
+    Primary Language      0
+    dtype: int64
+
+
+
+Load processed data into Cloud SQL database
+
+
+```python
+df_player_lang.to_sql(con=database_connection, name='ea_players_language', if_exists='replace',index=False)
+```
+
+## Generate Final Data Quality Report
+
+
+```python
+pf.ProfileReport(df_player_lang)
+```
+
+
+
+
+<meta charset="UTF-8">
+
+<style>
+
+        .variablerow {
+            border: 1px solid #e1e1e8;
+            border-top: hidden;
+            padding-top: 2em;
+            padding-bottom: 2em;
+            padding-left: 1em;
+            padding-right: 1em;
+        }
+
+        .headerrow {
+            border: 1px solid #e1e1e8;
+            background-color: #f5f5f5;
+            padding: 2em;
+        }
+        .namecol {
+            margin-top: -1em;
+            overflow-x: auto;
+        }
+
+        .dl-horizontal dt {
+            text-align: left;
+            padding-right: 1em;
+            white-space: normal;
+        }
+
+        .dl-horizontal dd {
+            margin-left: 0;
+        }
+
+        .ignore {
+            opacity: 0.4;
+        }
+
+        .container.pandas-profiling {
+            max-width:975px;
+        }
+
+        .col-md-12 {
+            padding-left: 2em;
+        }
+
+        .indent {
+            margin-left: 1em;
+        }
+
+        .center-img {
+            margin-left: auto !important;
+            margin-right: auto !important;
+            display: block;
+        }
+
+        /* Table example_values */
+            table.example_values {
+                border: 0;
+            }
+
+            .example_values th {
+                border: 0;
+                padding: 0 ;
+                color: #555;
+                font-weight: 600;
+            }
+
+            .example_values tr, .example_values td{
+                border: 0;
+                padding: 0;
+                color: #555;
+            }
+
+        /* STATS */
+            table.stats {
+                border: 0;
+            }
+
+            .stats th {
+                border: 0;
+                padding: 0 2em 0 0;
+                color: #555;
+                font-weight: 600;
+            }
+
+            .stats tr {
+                border: 0;
+            }
+
+            .stats td{
+                color: #555;
+                padding: 1px;
+                border: 0;
+            }
+
+
+        /* Sample table */
+            table.sample {
+                border: 0;
+                margin-bottom: 2em;
+                margin-left:1em;
+            }
+            .sample tr {
+                border:0;
+            }
+            .sample td, .sample th{
+                padding: 0.5em;
+                white-space: nowrap;
+                border: none;
+
+            }
+
+            .sample thead {
+                border-top: 0;
+                border-bottom: 2px solid #ddd;
+            }
+
+            .sample td {
+                width:100%;
+            }
+
+
+        /* There is no good solution available to make the divs equal height and then center ... */
+            .histogram {
+                margin-top: 3em;
+            }
+        /* Freq table */
+
+            table.freq {
+                margin-bottom: 2em;
+                border: 0;
+            }
+            table.freq th, table.freq tr, table.freq td {
+                border: 0;
+                padding: 0;
+            }
+
+            .freq thead {
+                font-weight: 600;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+
+            }
+
+            td.fillremaining{
+                width:auto;
+                max-width: none;
+            }
+
+            td.number, th.number {
+                text-align:right ;
+            }
+
+        /* Freq mini */
+            .freq.mini td{
+                width: 50%;
+                padding: 1px;
+                font-size: 12px;
+
+            }
+            table.freq.mini {
+                 width:100%;
+            }
+            .freq.mini th {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                max-width: 5em;
+                font-weight: 400;
+                text-align:right;
+                padding-right: 0.5em;
+            }
+
+            .missing {
+                color: #a94442;
+            }
+            .alert, .alert > th, .alert > td {
+                color: #a94442;
+            }
+
+
+        /* Bars in tables */
+            .freq .bar{
+                float: left;
+                width: 0;
+                height: 100%;
+                line-height: 20px;
+                color: #fff;
+                text-align: center;
+                background-color: #337ab7;
+                border-radius: 3px;
+                margin-right: 4px;
+            }
+            .other .bar {
+                background-color: #999;
+            }
+            .missing .bar{
+                background-color: #a94442;
+            }
+            .tooltip-inner {
+                width: 100%;
+                white-space: nowrap;
+                text-align:left;
+            }
+
+            .extrapadding{
+                padding: 2em;
+            }
+
+            .pp-anchor{
+
+            }
+
+</style>
+
+<div class="container pandas-profiling">
+    <div class="row headerrow highlight">
+        <h1>Overview</h1>
+    </div>
+    <div class="row variablerow">
+    <div class="col-md-6 namecol">
+        <p class="h4">Dataset info</p>
+        <table class="stats" style="margin-left: 1em;">
+            <tbody>
+            <tr>
+                <th>Number of variables</th>
+                <td>11 </td>
+            </tr>
+            <tr>
+                <th>Number of observations</th>
+                <td>17681 </td>
+            </tr>
+            <tr>
+                <th>Total Missing (%)</th>
+                <td>0.0% </td>
+            </tr>
+            <tr>
+                <th>Total size in memory</th>
+                <td>1.6 MiB </td>
+            </tr>
+            <tr>
+                <th>Average record size in memory</th>
+                <td>96.0 B </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="col-md-6 namecol">
+        <p class="h4">Variables types</p>
+        <table class="stats" style="margin-left: 1em;">
+            <tbody>
+            <tr>
+                <th>Numeric</th>
+                <td>6 </td>
+            </tr>
+            <tr>
+                <th>Categorical</th>
+                <td>5 </td>
+            </tr>
+            <tr>
+                <th>Boolean</th>
+                <td>0 </td>
+            </tr>
+            <tr>
+                <th>Date</th>
+                <td>0 </td>
+            </tr>
+            <tr>
+                <th>Text (Unique)</th>
+                <td>0 </td>
+            </tr>
+            <tr>
+                <th>Rejected</th>
+                <td>0 </td>
+            </tr>
+            <tr>
+                <th>Unsupported</th>
+                <td>0 </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="col-md-12" style="padding-left: 1em;">
+        
+        <p class="h4">Warnings</p>
+        <ul class="list-unstyled"><li><a href="#pp_var_Club"><code>Club</code></a> has a high cardinality: 647 distinct values  <span class="label label-warning">Warning</span></li><li><a href="#pp_var_Name"><code>Name</code></a> has a high cardinality: 16747 distinct values  <span class="label label-warning">Warning</span></li><li><a href="#pp_var_Nationality"><code>Nationality</code></a> has a high cardinality: 161 distinct values  <span class="label label-warning">Warning</span></li><li><a href="#pp_var_Primary Language"><code>Primary Language</code></a> has a high cardinality: 58 distinct values  <span class="label label-warning">Warning</span></li> </ul>
+    </div>
+</div>
+    <div class="row headerrow highlight">
+        <h1>Variables</h1>
+    </div>
+    <div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_Age">Age<br/>
+            <small>Numeric</small>
+        </p>
+    </div><div class="col-md-6">
+    <div class="row">
+        <div class="col-sm-6">
+            <table class="stats ">
+                <tr>
+                    <th>Distinct count</th>
+                    <td>29</td>
+                </tr>
+                <tr>
+                    <th>Unique (%)</th>
+                    <td>0.2%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (n)</th>
+                    <td>0</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (n)</th>
+                    <td>0</td>
+                </tr>
+            </table>
+
+        </div>
+        <div class="col-sm-6">
+            <table class="stats ">
+
+                <tr>
+                    <th>Mean</th>
+                    <td>25.11</td>
+                </tr>
+                <tr>
+                    <th>Minimum</th>
+                    <td>16</td>
+                </tr>
+                <tr>
+                    <th>Maximum</th>
+                    <td>47</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Zeros (%)</th>
+                    <td>0.0%</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="col-md-3 collapse in" id="minihistogram4217530015064900364">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABLCAYAAAA1fMjoAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAABKRJREFUeJzt3U9II1ccB/DvbELSraCpmkRTUpYiKIJSMEpPUnLSm4fSIFFCL%2BJBBBFCRIi0eMxJvfempKWoQVAPSr2qhzY9KEspu0Sjm3RkrZRQzOTtYUEotY/EOv/i93PS8PT9MjNfnPdnjCKEEDBYoVBAOp1GJBKBz%2BczunuyGTOvF8WMgBDZxTOzCyCyMqfZBRhFCAFN02r6GYfDAUVRdKqI7ODJBETTNCS//xmv1FJV7V%2B0PMe3X30Gp/PJHCK6x5M6%2B6/UEl5e/mV2GWQjtgzIQ26Xam1PBNg0ILXeLgHA5596dKyI6pUtAwLUfrv0SctzHauhesVpXiIJBoRIggEhkrDtGERvjmfKg2a%2BuLhYXxiQ//DxRx/gmx9/rWmmjIuL9YdnUoILi8QxCJEEA0IkwYAQSTAgRBIMCJEEZ7Ee0UPWTrhuYm0MyCOqde2E6ybWxzPzyLh2Ul84BiGSYECIJBgQIglLjEGEECiXy1W35/PlZBRLBETTNCR/%2BAWv/6hu9oePz5JRLBEQAHitlvDyTZWzP1w2IINwDEIkwYAQSTAgRBIMCJGEZQbpTxE3N1ofA2Iibm60Ph5pk3Fzo7VxDEIkwYAQSTAgRBIMCJEEA0IkwYAQSTAgRBIMCJEEFwpthJ9ZYjwGxEb4mSXG41GzGW5NMRYDUue4Y/j/sUxAvgwF8LZ0W1Vbz4dOHP/%2BtqbfH2hy1zQjUWt7I/p4SE39L5rw3U%2B/4c2ff1fV3t/oxtdfdMDhcNTYU23scsunCCGE0Z0WCgWk02lEIhH4fD6juyebMfN6MWWat1gsYmVlBcVi0YzuyWbMvF64DkIkwYAQSTAgRBIMCJGEKQHxer2YmpqC1%2Bs1o3uyGTOvF1OmeYnsgrdYRBIMCJEEA0IkwYAQSTAgRBIMCJEEA0Ikofum/MXFRezv7yOfz2NjYwNdXV0AgPHxceTzeTQ2NgIARkZGEIvF9C6HbCAcDsPtdsPtdkNRFExMTGB4eBhXV1eIx%2BPI5XJwuVxYWFhAKBTStxihs6OjI3F5eSnC4bA4OTm5e31sbEzs7e3p3T3ZUDgcFqenp/96fW5uTiwvLwshhMhms2JwcFCUy2Vda9H9FisUCsHv90Pcs2BfqVT07p5sSAhx7/Wyvb2N0dFRAEBPTw/8fj8ODw91rcXU5x5TqRSWlpbQ0dGBmZkZBINBM8shC4nH4wCA3t5ezM7OQlHeP1vf0tJy1yYQCODi4kLXOkwbpKdSKezs7CCTyaCvrw%2BTk5NmlUIWs7q6ikwmg/X1dXg8HiQSCQC496%2BK3kwLiN/vv/s6Go0il8vh%2BvrarHLIQtra2gC8/%2B8qsVgMx8fH8Hg8cDqdUFX1rt35%2BTna29t1rcWUgGia9o83uru7i9bWVjQ1NZlRDllIqVTCzc3N3fdbW1vo7u4GAAwNDWFtbQ0AkM1mUSgUMDAwoGs9um93TyaTODg4gKqq8Hg8aGhowObmJqLRKG5vb6EoCpqbm5FIJNDZ2alnKWQDuVwO09PTqFQqEEIgGAxifn4egUAAqqoiHo/j7OwMLpcLyWQS/f39utbD50GIJLiSTiTBgBBJvAPxaXwPnsgZCwAAAABJRU5ErkJggg%3D%3D">
+
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#descriptives4217530015064900364,#minihistogram4217530015064900364"
+       aria-expanded="false" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="row collapse col-md-12" id="descriptives4217530015064900364">
+    <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation" class="active"><a href="#quantiles4217530015064900364"
+                                                  aria-controls="quantiles4217530015064900364" role="tab"
+                                                  data-toggle="tab">Statistics</a></li>
+        <li role="presentation"><a href="#histogram4217530015064900364" aria-controls="histogram4217530015064900364"
+                                   role="tab" data-toggle="tab">Histogram</a></li>
+        <li role="presentation"><a href="#common4217530015064900364" aria-controls="common4217530015064900364"
+                                   role="tab" data-toggle="tab">Common Values</a></li>
+        <li role="presentation"><a href="#extreme4217530015064900364" aria-controls="extreme4217530015064900364"
+                                   role="tab" data-toggle="tab">Extreme Values</a></li>
+
+    </ul>
+
+    <div class="tab-content">
+        <div role="tabpanel" class="tab-pane active row" id="quantiles4217530015064900364">
+            <div class="col-md-4 col-md-offset-1">
+                <p class="h4">Quantile statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Minimum</th>
+                        <td>16</td>
+                    </tr>
+                    <tr>
+                        <th>5-th percentile</th>
+                        <td>18</td>
+                    </tr>
+                    <tr>
+                        <th>Q1</th>
+                        <td>21</td>
+                    </tr>
+                    <tr>
+                        <th>Median</th>
+                        <td>25</td>
+                    </tr>
+                    <tr>
+                        <th>Q3</th>
+                        <td>28</td>
+                    </tr>
+                    <tr>
+                        <th>95-th percentile</th>
+                        <td>33</td>
+                    </tr>
+                    <tr>
+                        <th>Maximum</th>
+                        <td>47</td>
+                    </tr>
+                    <tr>
+                        <th>Range</th>
+                        <td>31</td>
+                    </tr>
+                    <tr>
+                        <th>Interquartile range</th>
+                        <td>7</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-4 col-md-offset-2">
+                <p class="h4">Descriptive statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Standard deviation</th>
+                        <td>4.6146</td>
+                    </tr>
+                    <tr>
+                        <th>Coef of variation</th>
+                        <td>0.18378</td>
+                    </tr>
+                    <tr>
+                        <th>Kurtosis</th>
+                        <td>-0.46676</td>
+                    </tr>
+                    <tr>
+                        <th>Mean</th>
+                        <td>25.11</td>
+                    </tr>
+                    <tr>
+                        <th>MAD</th>
+                        <td>3.8055</td>
+                    </tr>
+                    <tr class="">
+                        <th>Skewness</th>
+                        <td>0.39532</td>
+                    </tr>
+                    <tr>
+                        <th>Sum</th>
+                        <td>443973</td>
+                    </tr>
+                    <tr>
+                        <th>Variance</th>
+                        <td>21.295</td>
+                    </tr>
+                    <tr>
+                        <th>Memory size</th>
+                        <td>276.3 KiB</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-8 col-md-offset-2" id="histogram4217530015064900364">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQCAYAAAByNR6YAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAAIABJREFUeJzs3X1clXWe//H34QBJ3KkcWMU0g0TEGwK8QQZ8jJjZ6G4Pt3XWpttxG2u2EdyGGlNREQW608aVzYeZo7kxxZQ25mg11e7YWHTjJJpj6YxM4f7M4ByTG9EOHM7vj7azXR1UqOtwOPB6Ph4%2B1Ov68r2%2B18cv53r7Pde5sLjdbrcAAABgmiB/DwAAAKC3IWABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYLuID1xBNPKDk5WWVlZZ5tixcvVnJysuHX/PnzDV/ndDq1cuVKTZo0SWlpacrPz5fD4TC0aWhoUEFBgTIyMjRhwgQtXbpULS0t33nMdXV1Wr9%2Bverq6r5zX70FNTGiHt6oiRH18EZNjKiHN3/WJKAC1qFDh1RZWank5GSvfVOmTNFbb72lN998U2%2B%2B%2BabWrl1r2F9SUqK9e/dq/fr1qqioUF1dnfLy8gxtCgoKVFNTo61bt2rjxo3av3%2B/li9f/p3HXV9fr/LyctXX13/nvnoLamJEPbxREyPq4Y2aGFEPb/6sScAErLNnz%2Br%2B%2B%2B/X6tWrFRkZ6bU/NDRUAwcOVExMjGJiYgxtmpubtX37di1evFgTJ05USkqKSktL9f777%2BvQoUOSpOPHj2vfvn0qKSnR2LFjlZ6ersLCQu3Zs4fJCgAAuiRgAlZxcbFyc3M1efLkDve/%2B%2B67ysrK0vXXX6%2BioiKdOXPGs%2B/w4cNyuVyGr01ISFB8fLwOHDggSaqurlZ0dLRSUlI8bbKysmSxWHTw4EEfnRUAAOiNgv09gM7YvXu3PvzwQ23fvr3D/Tk5Obruuut0xRVXqLa2VmvXrtVdd92lyspKWSwW2e12hYSEKCIiwvB1MTExstvtkiS73a6BAwca9lutVkVHR3vaAAAAdEaPD1inTp1SaWmptmzZopCQkA7bzJw50/PnESNGKCkpSdOnT9c777yjzMzM7hqqpC9vqPvmW4rHjx/v1jEAAID/09F1ODY2VnFxcT47Zo8PWIcPH9bp06d14403yu12S5JcLpf279%2BviooKffDBB7JYLIavGTp0qAYMGKDa2lplZmbKZrOptbVVzc3NhlUsh8Mhm80mSbLZbDp9%2BrShH5fLpYaGBk%2BbzqisrFR5ebnX9p/97GcaPXp0p/vp7UaPHq2jR4/6exg9BvXwRk2MqIc3amJEPbyNHj1aEyZM0P333%2B%2B1b8GCBV4fdjNTjw9YWVlZ2rVrl2HbAw88oMTERN11111e4Ur6ctXrzJkzio2NlSSNGTNGVqtVVVVVmj59uiSppqZGJ0%2BeVFpamiTpmmuuUWNjo44cOeK5D6uqqkput1upqamdHu/cuXOVm5vrtT02NlaNjefkcrV3uq/ezGoNUlRUGDX5X9TDGzUxoh7eqIkR9fBmtQZp7dq1HX5Y7auM4Cs9PmBdfvnluvrqqw3bwsLC1L9/fyUmJqqlpUXl5eWaMWOGbDabamtr9cgjj2j48OHKzs6WJEVERGjOnDkqKytTVFSUwsPDtXr1aqWnp2vcuHGSpMTERGVnZ6uwsFBFRUVqbW3VqlWrNGvWrC79I8TFxV1wyfHzz8%2BqrY1J/3UuVzs1%2BRrq4Y2aGFEPb9TEiHoYXey67Es9PmB15OurVlarVUePHtXOnTvV2NiouLg4ZWdna%2BHChYZ7tpYsWSKr1ar8/Hw5nU7l5ORoxYoVhn7XrFmj4uJizZs3T0FBQZoxY4aWLl3abecFAAB6B4v7qxub4HOsYP2f4OAgDRgQTk3%2BF/XwRk2MqIc3amJEPbx9VRN/CJjnYAEAAAQKAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgsmB/DwDoXm5/D%2BAC2tXW1iapXcYxWvw0HgDAd0HAQp/z2KvH9LHjnL%2BHcVHDY8J07/Qkfw8DAPAtEbDQ53zsOKdjp876exgAgF6Me7AAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATBZwAeuJJ55QcnKyysrKDNvXrVun7Oxspaamat68efrkk08M%2B51Op1auXKlJkyYpLS1N%2Bfn5cjgchjYNDQ0qKChQRkaGJkyYoKVLl6qlpcXn5wQAAHqXgApYhw4dUmVlpZKTkw3bn3jiCVVUVGjVqlV67rnnFBYWpjvvvFNOp9PTpqSkRHv37tX69etVUVGhuro65eXlGfopKChQTU2Ntm7dqo0bN2r//v1avnx5t5wbAADoPQImYJ09e1b333%2B/Vq9ercjISMO%2Bbdu26Z577tHUqVOVlJSkhx9%2BWHV1dXrttdckSc3Nzdq%2BfbsWL16siRMnKiUlRaWlpXr//fd16NAhSdLx48e1b98%2BlZSUaOzYsUpPT1dhYaH27Nmj%2Bvr6bj9fAAAQuAImYBUXFys3N1eTJ082bD9x4oTsdrsyMzM92yIiIpSamqrq6mpJ0gcffCCXy2X42oSEBMXHx%2BvAgQOSpOrqakVHRyslJcXTJisrSxaLRQcPHvTlqQEAgF4mIJ7kvnv3bn344Yfavn271z673S6LxSKbzWbYHhMTI7vdLklyOBwKCQlRRETEBdvY7XYNHDjQsN9qtSo6OtrTBgAAoDN6fMA6deqUSktLtWXLFoWEhPh7OJdUV1fX4VuKsbGx6tcvsoOv6Jus1iDD792nvZuP9%2B0FB1sUQIvMpvPfHOmZqIc3amJEPbxZrUEXvS7HxcX57Ng9PmAdPnxYp0%2Bf1o033ii32y1Jcrlc2r9/vyoqKvTSSy/J7XbLbrcbVrEcDodGjRolSbLZbGptbVVzc7NhFcvhcHi%2Bxmaz6fTp04Zju1wuNTQ0eK2OXUxlZaXKy8u9ti9YsMDrpnpIUVFh3Xq8tra2bj3edxEZGabg4B7/Lepz3T1Hejrq4Y2aGFEPo6eeetIv1%2BUe/%2BqdlZWlXbt2GbY98MADSkxM1F133aWhQ4fKZrPp7bff9ny6sLm5WQcPHtTNN98sSRozZoysVquqqqo0ffp0SVJNTY1OnjyptLQ0SdI111yjxsZGHTlyxHMfVlVVldxut1JTUzs93rlz5yo3N9dre2xsrBobz8nlCpwVFF%2ByWoMUFRXmh5oETv2bms6pr69g%2BWeO9EzUwxs1MaIe3qzWoItel32pxwesyy%2B/XFdffbVhW1hYmPr376/ExERJ0h133KENGzZo2LBhGjJkiNatW6dBgwZp2rRpkr686X3OnDkqKytTVFSUwsPDtXr1aqWnp2vcuHGSpMTERGVnZ6uwsFBFRUVqbW3VqlWrNGvWrC79I8TFxV1wyfHzz8%2BqrY1J/3UuV3s318Tdjcf6btra3AqkQOgr3T9Hejbq4Y2aGFEPo4tdl32pxwesjlgsFsPf58%2Bfr/Pnz2v58uVqamrS%2BPHjtWnTJoWGhnraLFmyRFarVfn5%2BXI6ncrJydGKFSsM/axZs0bFxcWaN2%2BegoKCNGPGDC1durRbzgkAAPQeFvdXNzbB51jB%2Bj/BwUEaMCDcDzVxa%2BGzB3Xs1NluPGbXJQ0K17qbUiVZLtm2t/LfHOmZqIc3amJEPbx9VRN/6Ls3eAAAAPgIAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAH5HCz0NN/mSR/t//tja9q/5dd/WzyVBADgewQsmOKxV4/pY8c5fw/jkjIT%2Bvt7CACAPoCABVN87DjX4x/eKUnDYvghqAAA3%2BMeLAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADBZjw9YzzzzjG644QZlZGQoIyNDN910k9544w3P/sWLFys5Odnwa/78%2BYY%2BnE6nVq5cqUmTJiktLU35%2BflyOByGNg0NDSooKFBGRoYmTJigpUuXqqWlpVvOEQAA9C7B/h7ApQwePFj33Xefhg8fLrfbrR07duiee%2B7Rzp07lZiYKEmaMmWKHnzwQbndbklSaGiooY%2BSkhL98Y9/1Pr16xUREaHi4mLl5eXp17/%2BtadNQUGBHA6Htm7dqtbWVi1evFjLly/Xo48%2B2n0nCwAAeoUev4L1/e9/X1OmTNGwYcN05ZVX6t5771V4eLiqq6s9bUJDQzVw4EDFxMQoJiZGkZGRnn3Nzc3avn27Fi9erIkTJyolJUWlpaV6//33dejQIUnS8ePHtW/fPpWUlGjs2LFKT09XYWGh9uzZo/r6%2Bm4/ZwAAENh6fMD6uvb2du3evVvnzp1TWlqaZ/u7776rrKwsXX/99SoqKtKZM2c8%2Bw4fPiyXy6XJkyd7tiUkJCg%2BPl4HDhyQJFVXVys6OlopKSmeNllZWbJYLDp48GA3nBkAAOhNevxbhJJ07NgxzZ07V06nU%2BHh4SovL1dCQoIkKScnR9ddd52uuOIK1dbWau3atbrrrrtUWVkpi8Uiu92ukJAQRUREGPqMiYmR3W6XJNntdg0cONCw32q1Kjo62tMGAACgswIiYCUkJOjFF19UU1OTXnnlFS1atEhPP/20EhMTNXPmTE%2B7ESNGKCkpSdOnT9c777yjzMzMbh9rXV1dh28rxsbGql%2B/yA6%2Bojdo9/cAeqXgYIsCbJHZVFZrkOH3vo56eKMmRtTDm9UadNHrclxcnM%2BOHRABKzg4WEOHDpUkpaSk6NChQ9q2bZtWrlzp1Xbo0KEaMGCAamtrlZmZKZvNptbWVjU3NxtWsRwOh2w2myTJZrPp9OnThn5cLpcaGho8bTqrsrJS5eXlXtsXLFigvLy8LvUVKNra2vw9hF4pMjJMwcEB8S3qU1FRYf4eQo9CPbxREyPqYfTUU0/65bockK/e7e3tcjqdHe47deqUzpw5o9jYWEnSmDFjZLVaVVVVpenTp0uSampqdPLkSc99XNdcc40aGxt15MgRz31YVVVVcrvdSk1N7dLY5s6dq9zcXK/tsbGxamw8J5erN6729MZz8r%2BmpnPq6ytYUVFhvfj7pmuohzdqYkQ9vFmtQRe9LvtSjw9Ya9eu1ZQpUzR48GCdPXtWu3bt0nvvvafNmzerpaVF5eXlmjFjhmw2m2pra/XII49o%2BPDhys7OliRFRERozpw5KisrU1RUlMLDw7V69Wqlp6dr3LhxkqTExERlZ2ersLBQRUVFam1t1apVqzRr1qwu/wPExcVdcMnx88/Pqq2tN056t78H0Cu1tblFeJVcrvZe%2Bn3z7VAPb9TEiHoYXey67Es9PmA5HA4tWrRI9fX1ioyM1MiRI7V582ZNnjxZX3zxhY4ePaqdO3eqsbFRcXFxys7O1sKFCxUSEuLpY8mSJbJarcrPz5fT6VROTo5WrFhhOM6aNWtUXFysefPmKSgoSDNmzNDSpUu7%2B3QBAEAvYHF/9XRO%2BFxvXsFa%2BOxBHTt11t8DuaRrR9tU6zjX48eaNChc625KlWTx91D8Jjg4SAMGhPfi75uuoR7eqIkR9fD2VU38oe/e4AEAAOAjBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAk/X452ABfZE1yKLAe4Br332kBAB8EwEL6IGGDOinx179iz52nPP3UC5peEyY7p2e5O9hAECPQsACeqiPA%2BCBqACAjnEPFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGCyHh%2BwnnnmGd1www3KyMhQRkaGbrrpJr3xxhuGNuvWrVN2drZSU1M1b948ffLJJ4b9TqdTK1eu1KRJk5SWlqb8/Hw5HA5Dm4aGBhUUFCgjI0MTJkzQ0qVL1dLS4vPzAwAAvU%2BPD1iDBw/WfffdpxdeeEE7duzQpEmTdM899%2Bj48eOSpCeeeEIVFRVatWqVnnvuOYWFhenOO%2B%2BU0%2Bn09FFSUqK9e/dq/fr1qqioUF1dnfLy8gzHKSgoUE1NjbZu3aqNGzdq//79Wr58ebeeKwAA6B16fMD6/ve/rylTpmjYsGG68sorde%2B99yo8PFzV1dWSpG3btumee%2B7R1KlTlZSUpIcfflh1dXV67bXXJEnNzc3avn27Fi9erIkTJyolJUWlpaV6//33dejQIUnS8ePHtW/fPpWUlGjs2LFKT09XYWGh9uzZo/r6er%2BdOwAACEw9PmB9XXt7u3bv3q1z584pLS1NJ06ckN1uV2ZmpqdNRESEUlNTPQHsgw8%2BkMvl0uTJkz1tEhISFB8frwMHDkiSqqurFR0drZSUFE%2BbrKwsWSwWHTx4sJvODgAA9BbB/h5AZxw7dkxz586V0%2BlUeHi4ysvLlZCQoAMHDshischmsxnax8TEyG63S5IcDodCQkIUERFxwTZ2u10DBw407LdarYqOjva0AQAA6KyACFgJCQl68cUX1dTUpFdeeUWLFi3S008/7e9hdaiurq7DtxVjY2PVr1%2BkH0bUHdr9PQD4WXCwRWYviFutQYbf%2Bzrq4Y2aGFEPb1Zr0EWvy3FxcT47dkAErODgYA0dOlSSlJKSokOHDmnbtm36yU9%2BIrfbLbvdbljFcjgcGjVqlCTJZrOptbVVzc3NhlUsh8Ph%2BRqbzabTp08bjulyudTQ0OC1OnYplZWVKi8v99q%2BYMECrxvre4u2tjZ/DwF%2BFhkZpuBg37ycREWF%2BaTfQEU9vFETI%2Bph9NRTT/rluhwQAeub2tvb5XQ6NXToUNlsNr399ttKTk6W9OVN7QcPHtTNN98sSRozZoysVquqqqo0ffp0SVJNTY1OnjyptLQ0SdI111yjxsZGHTlyxHMfVlVVldxut1JTU7s0trlz5yo3N9dre2xsrBobz8nl6o2rPb3xnNAVTU3n5IsVrKiosF78fdM11MMbNTGiHt6s1qCLXpd9qccHrLVr12rKlCkaPHiwzp49q127dum9997T5s2bJUl33HGHNmzYoGHDhmnIkCFat26dBg0apGnTpkn68qb3OXPmqKysTFFRUQoPD9fq1auVnp6ucePGSZISExOVnZ2twsJCFRUVqbW1VatWrdKsWbO6/A8QFxd3wSXHzz8/q7a23jjp3f4eAPysrc0tXwVtl6u9l37ffDvUwxs1MaIeRhe7LvtSjw9YDodDixYtUn19vSIjIzVy5Eht3rzZ86nA%2BfPn6/z581q%2BfLmampo0fvx4bdq0SaGhoZ4%2BlixZIqvVqvz8fDmdTuXk5GjFihWG46xZs0bFxcWaN2%2BegoKCNGPGDC1durRbzxUAAPQOFrfbzfJDN%2BnNK1gLnz2oY6fO%2Bnsgl3TtaJtqHed6/FgDZZySlDQoXOtuSpVkMbXf4OAgDRgQ3ou/b7qGenijJkbUw9tXNfEHPmoAAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJfBKwmpubfdEtAABAQPBJwMrOztYDDzyg9957zxfdAwAA9Gg%2BCVgFBQU6evSobrvtNl133XXauHGjPvvsM18cCgAAoMfxScC67bbb9MILL2jHjh2aMmWKtmzZotzcXN1111169dVX1dbW5ovDAgAA9Ag%2Bvck9JSVFhYWF%2BuMf/6hHH31UjY2Nys/P15QpU/TQQw/pxIkTvjw8AACAX/j8U4Rut1tVVVV6%2BeWX9ec//1kDBw7U1KlT9fLLL%2BsHP/iBnn/%2BeV8PAQAAoFsF%2B6rjEydOaPv27frtb3%2Bruro6ZWVlac2aNcrNzVVwcLDa29v1yCOP6LHHHtOcOXN8NQwAAIBu55OAddttt%2BlPf/qTYmNj9U//9E%2BaM2eO4uPjDW2CgoL0gx/8QFu2bPHFEAAAAPzGJwErMjJSjz/%2BuKZMmaKgoAu/C5mcnKzf//73vhgCAACA3/gkYD3%2B%2BOOdahcaGqphw4b5YggAAAB%2B45Ob3F966SX96le/6nDfli1b9Morr/jisAAAAD2CTwLWxo0bZbVaO9wXEhKijRs3%2BuKwAAAAPYJPAtYnn3yipKSkDvddffXV%2Btvf/uaLwwIAAPQIPglYISEhOn36dIf77Hb7BVe3AAAAegOfBKzx48dr06ZNOn/%2BvGH7%2BfPntXnzZk2YMKHTfW3cuFFz5sxRenq6srKy9LOf/cxrBWzx4sVKTk42/Jo/f76hjdPp1MqVKzVp0iSlpaUpPz9fDofD0KahoUEFBQXKyMjQhAkTtHTpUrW0tHTx7AEAQF/nk08R/vznP9fcuXN17bXX6gc/%2BIHi4uJUV1enl19%2BWefOndMjjzzS6b7279%2BvW2%2B9VWPHjlVbW5vWrl2rO%2B%2B8U3v27FG/fv087aZMmaIHH3xQbrdb0pefUPy6kpIS/fGPf9T69esVERGh4uJi5eXl6de//rWnTUFBgRwOh7Zu3arW1lYtXrxYy5cv16OPPvodKwIAAPoSnwSsq6%2B%2BWs8//7zWrVunXbt2qaGhQdHR0crKytKCBQuUkJDQ6b42bdpk%2BHtZWZmysrJ0%2BPBhjR8/3rM9NDRUAwcO7LCP5uZmbd%2B%2BXY899pgmTpwoSSotLdXMmTN16NAhjRs3TsePH9e%2Bffu0Y8cOpaSkSJIKCwt19913a9GiRYqNje1qGQAAQB/lsx%2BVc9VVV%2BmXv/yl6f02NTXJYrGof//%2Bhu3vvvuusrKyFBUVpczMTP3bv/2bp83hw4flcrk0efJkT/uEhATFx8frwIEDGjdunKqrqxUdHe0JV5KUlZUli8WigwcP6tprrzX9XIDewBpkkeT2Qc/tamtrk9Rucv8WE/sCgI75LGD5gtvtVmlpqTIyMnT11Vd7tufk5Oi6667TFVdcodraWq1du1Z33XWXKisrZbFYZLfbFRISooiICEN/MTExstvtkr68%2Bf6bK2BWq1XR0dGeNgC8DRnQT4%2B9%2Bhd97Djn76Fc1PCYMN07veNPNwOA2XwSsNxut7Zv365XXnlFp06dktPp9GrzbR42WlRUpL/%2B9a965plnDNtnzpzp%2BfOIESOUlJSk6dOn65133lFmZmbXT%2BA7qKurU319vdf22NhY9esX2a1j6T7t/h4A/OxjxzkdO3XW38O4pOBgi3z02R6fs1qDDL%2BDmnwT9fBmtQZd9LocFxfns2P7JGCtWbNGTz75pNLT05WWlqaQkJDv3GdxcbHeeOMNVVRUXLIgQ4cO1YABA1RbW6vMzEzZbDa1traqubnZsIrlcDhks9kkSTabzevREi6XSw0NDZ42nVFZWany8nKv7QsWLFBeXl6n%2BwkkX76NA/R8kZFhCg4OqIV7L1FRYf4eQo9DTYyoh9FTTz3pl%2BuyT15pfvvb32rBggVasGCBKf0VFxfr9ddf19NPP634%2BPhLtj916pTOnDnjuTF9zJgxslqtqqqq0vTp0yVJNTU1OnnypNLS0iRJ11xzjRobG3XkyBHPfVhVVVVyu91KTU3t9Fjnzp2r3Nxcr%2B2xsbFqbDwnl6s3rvb0xnNCb9TUdE6BvIIVFRXWi19Huo6aGFEPb1Zr0EWvy77kk4D1xRdfKCMjw5S%2BioqKtHv3bm3YsEFhYWGe%2B6EiIyN12WWXqaWlReXl5ZoxY4ZsNptqa2v1yCOPaPjw4crOzpYkRUREaM6cOSorK1NUVJTCw8O1evVqpaena9y4cZKkxMREZWdnq7CwUEVFRWptbdWqVas0a9asLv0jxMXFXXCF7fPPz6qtrTdOel/c4AyYr63NrUD/D4HL1d5LX0e%2BPWpiRD2MLnZd9iWfBKy///u/1969ew2f2vu2nn32WVksFt12222G7WVlZZo9e7asVquOHj2qnTt3qrGxUXFxccrOztbChQsNb00uWbJEVqtV%2Bfn5cjqdysnJ0YoVKwx9rlmzRsXFxZo3b56CgoI0Y8YMLV269DufAwAA6Ft8ErDGjx%2BvtWvXyuFw6Hvf%2B54iI71v7p42bVqn%2Bvroo48uuv%2Byyy7T5s2bL9lPaGioli1bpmXLll2wTVRUFA8VBQAA35lPAlZBQYEk6f/9v/%2BnXbt2ee23WCz68MMPfXFoAAAAv/NJwPr973/vi24BAAACgk8C1rBhw3zRLQAAQEDw6QNh3nrrLX3wwQf69NNPdffdd2vw4MH605/%2BpKFDh/rljn4AAIDu4JOAdfr0aeXl5en9999XbGys6uvr9cMf/lCDBw9WZWWlIiIitHz5cl8cGgAAwO988sS90tJS1dXVaefOnfqv//ovud3/95ykrKwsVVVV%2BeKwAAAAPYJPAtbevXt17733KikpSRaL8SfXx8fH69SpU744LAAAQI/gk4DV1tam8PDwDvc1NjYG/M8CAwAAuBifBKyxY8dqx44dHe576aWXlJ6e7ovDAgAA9Ag%2BWUpauHChfvzjH%2Bv222/XjBkzZLFY9N///d/avHmzXnvtNVVUVPjisAAAAD2CT1awMjIytGXLFjmdTq1evVput1v/8R//of/5n//Rr371K40dO9YXhwUAAOgRfHYz1Pjx4/Xss8%2BqpaVFZ86cUVRUlCIiInx1OAAAgB7D53ebX3755br88st9fRgAAIAewycBa9myZZdss2rVKl8cGgAAwO98ErCqq6u9tjU0NKi%2Bvl79%2B/eXzWbzxWEBAAB6BJ8ErF27dnW4/dixY7r//vtVWFjoi8MCAACzokpPAAAgAElEQVT0CD75FOGFJCUl6Sc/%2BYlKSkq687AAAADdqlsDliRFRUXpk08%2B6e7DAgAAdBufvEXY3Nzstc3pdKqmpkbr1q3T1Vdf7YvDAgAA9Ag%2BCVjjx4/3%2BiHPkuR2uxUXF6fHH3/cF4cFAADoEXwSsDp6BMNll12mQYMGKS0tTSEhIb44LAAAQI/gk4D1wx/%2B0BfdAgAABIRuv8kdAACgt/PJCtbo0aM7vAfrQg4fPuyLYQAAAPiFTwLWwoULVVFRIavVqtzcXNlsNtntdr3%2B%2Butyu9265ZZbZLVafXFoAAAAv/NJwGpqalJycrIef/xxQ5BavHix/vVf/1VnzpzR/fff36m%2BNm7cqFdffVU1NTXq16%2Bf0tLSdN999%2Bmqq64ytFu3bp2ee%2B45NTU1KT09XUVFRbryyis9%2B51Op8rKyrRnzx45nU7l5ORoxYoViomJ8bRpaGhQcXGx/vCHPygoKEjXXXedli5dyg%2BrBgAAXeKTe7B27NjR4SqV1WrVLbfcoh07dnS6r/379%2BvWW2/Vc889py1btqitrU133nmnzp8/72nzxBNPqKKiQqtWrdJzzz2nsLAw3XnnnXI6nZ42JSUl2rt3r9avX6%2BKigrV1dUpLy/PcKyCggLV1NRo69at2rhxo/bv36/ly5d/yyoAAIC%2ByicBq6WlRZ9%2B%2BmmH%2Bz799FN98cUXne5r06ZNmj17thITEzVy5EiVlZXp5MmThvu2tm3bpnvuuUdTp05VUlKSHn74YdXV1em1116T9OWDT7dv367Fixdr4sSJSklJUWlpqd5//30dOnRIknT8%2BHHt27dPJSUlGjt2rNLT01VYWKg9e/aovr7%2BO1QDAAD0NT4JWNOmTdOjjz6qF198US0tLZK%2BDF07d%2B7UmjVrlJub%2B637bmpqksViUf/%2B/SVJJ06ckN1uV2ZmpqdNRESEUlNTVV1dLUn64IMP5HK5NHnyZE%2BbhIQExcfH68CBA5Kk6upqRUdHKyUlxdMmKytLFotFBw8e/NbjBQAAfY9P7sFasWKFFi1apF/84heyWCy67LLL9MUXX8jtdmvq1KlasWLFt%2BrX7XartLRUGRkZnh%2B3Y7fbZbFYZLPZDG1jYmJkt9slSQ6HQyEhIYqIiLhgG7vdroEDBxr2W61WRUdHe9oAAAB0hk8CVmRkpB5//HEdPXpUhw4dkt1uV2xsrMaOHauRI0d%2B636Lior017/%2BVc8884yJozVXXV1dh28pxsbGql%2B/yC719WnDWb3xUc8PdwPDeTI/AkNwsEWB%2Bvg/qzXI8DuoyTdRD29Wa9BFr8txcXE%2BO7ZPAtZXRo4c%2BZ0C1dcVFxfrjTfeUEVFhaEgNptNbrdbdrvdsIrlcDg0atQoT5vW1lY1NzcbVrEcDofna2w2m06fPm04psvlUkNDg9fq2MVUVlaqvLzca/uCBQu8bqq/lE%2BbzunJP9Z26Wv8IWlQuL%2BHAHRKZGSYgoN9%2BrLnc1FRYf4eQo9DTYyoh9FTTz1p2nW5K3z2StPW1qYXXnhBH3zwgT799FMVFhbqyiuv1Msvv6ykpCQlJCR0uq/i4mK9/vrrevrppxUfH2/YN3ToUNlsNr399ttKTk6W9OVN7QcPHtTNN98sSRozZoysVquqqqo0ffp0SVJNTY1OnjyptLQ0SdI111yjxsZGHTlyxHMfVlVVldxut1JTUzs91rlz53Z4j1lsbKwaG8/J5WrvdF9ffNHa6bYALq2p6ZwCeQUrKiqsy68jvRk1MaIe3qzWoItel33JJwHrxIkT%2Bpd/%2BRfZ7XaNHDlSBw8eVHNzs6QvQ8vevXtVVlbWqb6Kioq0e/dubdiwQWFhYZ77oSIjI3XZZZdJku644w5t2LBBw4YN05AhQ7Ru3ToNGjRI06ZNk/TlTe9z5sxRWVmZoqKiFB4ertWrVys9PV3jxo2TJCUmJio7O1uFhYUqKipSa2urVq1apVmzZnXpHyEuLu6CS46ff35WbW2dn/TtfH8Apmprc0sK7G8sl6u9S68jfQE1MaIeRhe7LvuSTwJWSUmJoqKi9Oyzzyo6Olpjxozx7Js0aZIee%2ByxTvf17LPPymKx6LbbbjNsLysr0%2BzZsyVJ8%2BfP1/nz57V8%2BXI1NTVp/Pjx2rRpk0JDQz3tlyxZIqvVqvz8fMODRr9uzZo1Ki4u1rx58xQUFKQZM2Zo6dKl36YEAACgD/NJwHrnnXf06KOPKiYmRi6Xy7AvNjZWdXV1ne7ro48%2B6lS7vLy8i76XGhoaqmXLlmnZsmUXbBMVFaVHH32002MDAADoiE9uRggKCpLb7e5wn91u50fPAACAXs0nAWvChAnatm2b2traPNssFosk6fnnnzc8FBQAAKC38clbhAUFBfrRj36kWbNm6dprr5XFYtGzzz6rY8eOqaamRr/5zW98cVgAAIAewScrWCNGjND27ds1ZswYzw92fuWVVzR48GD95je/0fDhw31xWAAAgB7B9BUst9uts2fPKj4%2BXmvWrDG7ewAAgB7P9BWs1tZWTZw4Ufv27TO7awAAgIBgesAKDQ3V3/3d313wU4QAAAC9nU/uwfrRj36krVu3yul0%2BqJ7AACAHs0nnyK02%2B2qqanR1KlTlZmZqZiYGM9jGqQvH9nwwAMP%2BOLQAAAAfueTgPXKK6/IarVKkvbv3%2B%2B1n4AFAAB6M58ErL179/qiWwAAgIBg2j1Y//AP/6Bjx44Ztu3atUuNjY1mHQIAACAgmBaw/vKXv%2Bj8%2BfOev7tcLv3iF7/QiRMnzDoEAABAQPDJpwi/wqMaAABAX%2BTTgAUAANAX%2BTxgff3xDAAAAH2BqZ8ivOOOO7wC1S233OK1zWKx6E9/%2BpOZhwYAAOgxTAtYCxYsMKsrAACAgEbAAgAAMBk3uQMAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYLCAC1v79%2B/XTn/5UOTk5Sk5O1uuvv27Yv3jxYiUnJxt%2BzZ8/39DG6XRq5cqVmjRpktLS0pSfny%2BHw2Fo09DQoIKCAmVkZGjChAlaunSpWlpafH5%2BAACgdwmIgNXS0qJRo0ZpxYoVF3wy/JQpU/TWW2/pzTff1Jtvvqm1a9ca9peUlGjv3r1av369KioqVFdXp7y8PEObgoIC1dTUaOvWrdq4caP279%2Bv5cuX%2B%2By8AABA72Tqk9x9ZcqUKZoyZYqkC/8A6dDQUA0cOLDDfc3Nzdq%2Bfbsee%2BwxTZw4UZJUWlqqmTNn6tChQxo3bpyOHz%2Buffv2aceOHUpJSZEkFRYW6u6779aiRYsUGxvrgzMDAAC9UUCsYHXGu%2B%2B%2Bq6ysLF1//fUqKirSmTNnPPsOHz4sl8ulyZMne7YlJCQoPj5eBw4ckCRVV1crOjraE64kKSsrSxaLRQcPHuy%2BEwEAAAEvIFawLiUnJ0fXXXedrrjiCtXW1mrt2rW66667VFlZKYvFIrvdrpCQEEVERBi%2BLiYmRna7XZJkt9u9VsCsVquio6M9bQAAADqjVwSsmTNnev48YsQIJSUlafr06XrnnXeUmZnZrWOpq6tTfX291/bY2Fj16xfZpb6Ces36ItAzBAdbFKgL91ZrkOF3UJNvoh7erNagi16X4%2BLifHbsXhGwvmno0KEaMGCAamtrlZmZKZvNptbWVjU3NxtWsRwOh2w2myTJZrPp9OnThn5cLpcaGho8bTqjsrJS5eXlXtsXLFjgdVP9pXzadK5L7QFcXGRkmIKDA/tlLyoqzN9D6HGoiRH1MHrqqSdNuy53RWC/0lzAqVOndObMGc%2BN6WPGjJHValVVVZWmT58uSaqpqdHJkyeVlpYmSbrmmmvU2NioI0eOeO7DqqqqktvtVmpqaqePPXfuXOXm5nptj42NVWPjOblc7Z3u64svWjvdFsClNTWdUyCvYEVFhXX5daQ3oyZG1MOb1Rp00euyLwVEwGppaVFtba3nE4QnTpzQRx99pOjoaEVHR6u8vFwzZsyQzWZTbW2tHnnkEQ0fPlzZ2dmSpIiICM2ZM0dlZWWKiopSeHi4Vq9erfT0dI0bN06SlJiYqOzsbBUWFqqoqEitra1atWqVZs2a1aV/hLi4uAsuOX7%2B%2BVm1tXV%2B0rfz/QGYqq3NLSmwv7FcrvYuvY70BdTEiHoYXey67EsBEbAOHz6s22%2B/XRaLRRaLRQ899JAkafbs2SoqKtLRo0e1c%2BdONTY2Ki4uTtnZ2Vq4cKFCQkI8fSxZskRWq1X5%2BflyOp3KycnRihUrDMdZs2aNiouLNW/ePAUFBWnGjBlaunRpt54rAAAIfAERsCZOnKiPPvrogvs3b958yT5CQ0O1bNkyLVu27IJtoqKi9Oijj36rMQIAAHwlMG9GAAAA6MEIWAAAACYjYAEAAJiMgAUAAGCygLjJHQC%2BK2uQRVLHPyy%2B57L4ewAAviUCFoA%2BYciAfnrs1b/oY0fP/wkJw2PCdO/0JH8PA8B3QMAC0Gd87DinY6fO%2BnsYAPoA7sECAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQBEbD279%2Bvn/70p8rJyVFycrJef/11rzbr1q1Tdna2UlNTNW/ePH3yySeG/U6nUytXrtSkSZOUlpam/Px8ORwOQ5uGhgYVFBQoIyNDEyZM0NKlS9XS0uLTcwMAAL1PQASslpYWjRo1SitWrJDFYvHa/8QTT6iiokKrVq3Sc889p7CwMN15551yOp2eNiUlJdq7d6/Wr1%2BviooK1dXVKS8vz9BPQUGBampqtHXrVm3cuFH79%2B/X8uXLfX5%2BAACgdwmIgDVlyhQtXLhQ1157rdxut9f%2Bbdu26Z577tHUqVOVlJSkhx9%2BWHV1dXrttdckSc3Nzdq%2BfbsWL16siRMnKiUlRaWlpXr//fd16NAhSdLx48e1b98%2BlZSUaOzYsUpPT1dhYaH27Nmj%2Bvr6bj1fAAAQ2AIiYF3MiRMnZLfblZmZ6dkWERGh1NRUVVdXS5I%2B%2BOADuVwuTZ482dMmISFB8fHxOnDggCSpurpa0dHRSklJ8bTJysqSxWLRwYMHu%2BlsAABAbxDwActut8tischmsxm2x8TEyG63S5IcDodCQkIUERFxwTZ2u10DBw407LdarYqOjva0AQAA6Ixgfw%2Bgt6mrq%2BvwLcXY2Fj16xfZpb6CAj7%2BAvi2goMt%2Bvr/ga3WIMPvoCbfRD28Wa1BF70ux8XF%2BezYAR%2BwbDab3G637Ha7YRXL4XBo1KhRnjatra1qbm42rGI5HA7P19hsNp0%2BfdrQt8vlUkNDg9fq2MVUVlaqvLzca/uCBQu8bqq/lE%2BbznWpPYDeIzIyTMHB3i/RUVFhfhhNz0ZNjKiH0VNPPWnadbkrAj5gDR06VDabTW%2B//baSk5MlfXlT%2B8GDB3XzzTdLksaMGSOr1aqqqipNnz5dklRTU6OTJ08qLS1NknTNNdeosbFRR44c8dyHVVVVJbfbrdTU1E6PZ%2B7cucrNzfXaHhsbq8bGc3K52jvd1xdftHa6LYDepanpnL65ghUVFdbl15HejJoYUQ9vVmvQRa/LvhQQAaulpUW1tbWeTxCeOHFCH330kaKjozV48GDdcccd2rBhg4YNG6YhQ4Zo3bp1GjRokKZNmybpy5ve58yZo7KyMkVFRSk8PFyrV69Wenq6xo0bJ0lKTExUdna2CgsLVVRUpNbWVq1atUqzZs3q0j9CXFzcBZccP//8rNraOj/p2/n%2BAPqstja3JO8XAZervUuvI30BNTGiHkYXuy77UkAErMOHD%2Bv222%2BXxWKRxWLRQw89JEmaPXu2ysrKNH/%2BfJ0/f17Lly9XU1OTxo8fr02bNik0NNTTx5IlS2S1WpWfny%2Bn06mcnBytWLHCcJw1a9aouLhY8%2BbNU1BQkGbMmKGlS5d267kCAIDAFxABa%2BLEifroo48u2iYvL%2B%2Bi76WGhoZq2bJlWrZs2QXbREVF6dFHH/3W4wQAAJB6wWMaAAAAehoCFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmKxXBKzy8nIlJycbfs2cOdPQZt26dcrOzlZqaqrmzZunTz75xLDf6XRq5cqVmjRpktLS0pSfny%2BHw9GdpwEAAHqJXhGwJGnEiBF666239Oabb%2BrNN9/Ur3/9a8%2B%2BJ554QhUVFVq1apWee%2B45hYWF6c4775TT6fS0KSkp0d69e7V%2B/XpVVFSorq5OeXl5/jgVAAAQ4HpNwAoODtbAgQMVExOjmJgY9e/f37Nv27ZtuueeezR16lQlJSXp4YcfVl1dnV577TVJUnNzs7Zv367Fixdr4sSJSklJUWlpqd5//30dOnTIX6cEAAACVK8JWB9//LFycnJ07bXX6r777tOnn34qSTpx4oTsdrsyMzM9bSMiIpSamqrq6mpJ0gcffCCXy6XJkyd72iQkJCg%2BPl4HDhzo3hMBAAABL9jfAzBDamqqHnzwQV111VWqr6/X%2BvXrdcstt%2Bh3v/ud7Ha7LBaLbDab4WtiYmJkt9slSQ6HQyEhIYqIiLhgGwAAgM7qFQErJyfH8%2BekpCSNGzdOU6dO1UsvvaSEhIRuHUtdXZ3q6%2Bu9tsfGxqpfv8gu9RXUa9YXAXRVcLBFX3%2BTwWoNMvwOavJN1MOb1Rp00etyXFycz47dKwLWN0VGRmr48OGqra3VxIkT5Xa7ZbfbDatYDodDo0aNkiTZbDa1traqubnZsIrlcDi8Vr4upbKyUuXl5V7bFyxY0OWb5j9tOtel9gB6j8jIMAUHe79ER0WF%2BWE0PRs1MaIeRk899aRp1%2BWu6JUB6%2BzZs6qtrdU//uM/aujQobLZbHr77beVnJws6cub2g8ePKibb75ZkjRmzBhZrVZVVVVp%2BvTpkqSamhqdPHlSaWlpXTr23LlzlZub67U9NjZWjY3n5HK1d7qvL75o7dKxAfQeTU3n9M0VrKiosC6/jvRm1MSIenizWoMuel32pV4RsB566CHl5uYqPj5en332mdavX6/g4GDPs7DuuOMObdiwQcOGDdOQIUO0bt06DRo0SNOmTZP05U3vc%2BbMUVlZmaKiohQeHq7Vq1crPT1d48aN69JY4uLiLrjk%2BPnnZ9XW1vlJ3873B9BntbW5JXm/CLhc7V16HekLqIkR9TC62HXZl3pFwPrss89UUFCgM2fOaODAgcrIyFBlZaUGDBggSZo/f77Onz%2Bv5cuXq6mpSePHj9emTZsUGhrq6WPJkiWyWq3Kz8%2BX0%2BlUTk6OVqxY4a9TAgAAAaxXBKy1a9desk1eXt5F32sNDQ3VsmXLtGzZMjOHBgAA%2BiA%2BagAAAGAyAhYAAIDJCFgAAAAm6xX3YAFAb2INskhyf2Nru9ra2vTlJwu/uc/fLP4eANDjELAAoIcZMqCfHnv1L/rY0bMfNjw8Jkz3Tk/y9zCAHomABQA90MeOczp26qy/hwHgW%2BIeLAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQGrAxUVFcrNzdW4ceP0z//8zzp06JC/hwQAAAIIAesb9uzZowcffFD5%2Bfl64YUXlJycrJ/85Cc6ffq0v4cGAD2KNcgiye3HX%2B1qa2uT1N6FrwG6R7C/B9DTbN26VXPnztXs2bMlSStXrtQf/vAHbd%2B%2BXfPnz/fz6ACg5xgyoJ8ee/Uv%2Bthxzt9DuaThMWG6d3qSv4eBPoSA9TWtra3685//rLvvvtuzzWKxKCsrS9XV1X4cGQD0TB87zunYqbP%2BHgbQ4/AW4dd8/vnncrlcstlshu0xMTGy2%2B1%2BGhUAAAg0rGCZrK6uTvX19V7bY2Nj1a9fZJf6sgZZlDQo3Kyh%2BcywmLCASerx0ZcFxFgDZZxS4Iw1UMYpBc5YA2Wc0pdvEQb38iteUJDU1tamoCB147n27BlgtQZd9LocFxfns2P38unWNQMGDJDVavVarXI4HF6rWhdSWVmp8vJyr%2B0TJkzQ2rVru/SPOWBAuH49YlCn2weSuro6VVZWau7cuT6d4IGCenijJkbUwxs1Maqrq9O2bb%2BiHl9TV1enn//853rvvfe89i1YsEB5eXk%2BOzYB62tCQkI0evRoVVVVadq0aZIkt9utqqoq3XbbbZ3qY%2B7cucrNzTVsO378uO6//37V19cz6f9XfX29ysvLlZubS01EPTpCTYyohzdqYkQ9vNXX1%2Bu9997TI488osTERMO%2B2NhYnx6bgPUNP/7xj7V48WKNGTNGY8eO1VNPPaXz58/rxhtv7NTXx8XFMbEBAOhBEhMTNXr06G49JgHrG2bOnKnPP/9c//7v/y673a5Ro0bpySef1MCBA/09NAAAECAIWB245ZZbdMstt/h7GAAAIED17Nv/AQAAApC1qKioyN%2BD6AvCw8M1ceJEhYf3/McudBdqYkQ9vFETI%2BrhjZoYUQ9v/qqJxe1288OZAAAATMRbhAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYJtq/f79%2B%2BtOfKicnR8nJyXr99dcN%2BxcvXqzk5GTDr/nz5/tptL63ceNGzZkzR%2Bnp6crKytLPfvYz/e1vf/Nqt27dOmVnZys1NVXz5s3TJ5984ofR%2Bl5n6tHX5sgzzzyjG264QRkZGcrIyNBNN92kN954w9Cmr8wP6dL16GvzoyNPPPGEkpOTVVZWZtjel%2BbJ13VUj742T8rLy73Od%2BbMmYY2/pgf/LBnE7W0tGjUqFGaM2eO8vLyOmwzZcoUPfjgg/rqAfqhoaHdOcRutX//ft16660aO3as2tratHbtWt15553as2eP%2BvXrJ%2BnLF4eKigo99NBDGjJkiH75y1962vS22nSmHlLfmiODBw/Wfffdp%2BHDh8vtdmvHjh265557tHPnTiUmJvap%2BSFduh5S35of33To0CFVVlYqOTnZsL2vzZOvXKgeUt%2BbJyNGjNBTTz3lOV%2Br1erZ57f54YZPjBw50v3aa68Ztj3wwAPun/3sZ34akf85HA73yJEj3e%2B9955n2/e%2B9z33li1bPH9vampyjx071r17924/jLB7dVSPvj5H3G63e%2BLEie7nn3/e7Xb37fnxla/Xoy/Pj%2BbmZvd1113nfuutt9y33nqru7S01LOvL86Ti9Wjr82T9evXu2fPnn3B/f6aH7xF2M3effddZWVl6frrr1dRUZHOnDnj7yF1m6amJlksFvXv31%2BSdOLECdntdmVmZnraREREKDU1VdXV1f4aZrf5Zj2%2B0lfnSHt7u3bv3q1z584pLS2tz8%2BPb9bjK311fhQXFys3N1eTJ082bO%2Br8%2BRC9fhKX5snH3/8sXJycnTttdfqvvvu06effirJv/ODtwi7UU5Ojq677jpdccUVqq2t1dq1a3XXXXepsrJSFovF38PzKbfbrdLSUmVkZOjqq6%2BWJNntdlksFtlsNkPbmJgY2e12fwyz23RUD6lvzpFjx45p7ty5cjqdCg8PV3l5uRISEnTgwIE%2BOT8uVA%2Bpb84PSdq9e7c%2B/PBDbd%2B%2B3WtfX3wduVg9pL43T1JTU/Xggw/qqquuUn19vdavX69bbrlFv/vd7/w6PwhY3ejrN92NGDFCSUlJmj59ut555x1Duu6NioqK9Ne//lXPPPOMv4fSI1yoHn1xjiQkJOjFF19UU1OTXnnlFS1atEhPP/20v4flNxeqR2JiYp%2BcH6dOnVJpaam2bNmikJAQfw/H7zpTj742T3Jycjx/TkpK0rhx4zR16lS99NJLnv%2Bc%2BANvEfrR0KFDNWDAANXW1vp7KD5VXFysN954Q//5n/%2BpuLg4z3abzSa32%2B31vwiHw%2BH1v43e5EL16EhfmCPBwcEaOnSoUlJSdO%2B99yo5OVnbtm3rs/PjQvXoSF%2BYH4cPH9bp06d14403avTo0Ro9erTee%2B89bdu2TWPGjOlz8%2BRS9XD/703eX9cX5snXRUZGavjw4aqtrfXr/CBg%2BdGpU6d05swZxcbG%2BnsoPlNcXKzXX39d27ZtU3x8vGHf0KFDZbPZ9Pbbb3u2NTc36%2BDBg4Z7TnqTi9WjI31hjnxTe3u7nE5nn5wfHfmqHh3pC/MjKytLu3bt0m9/%2B1vt3LlTO3fu1JgxY3TDDTdo586dfW6eXKoeHb0F2BfmydedPXtWtbW1iouL8%2Bv84C1CE7W0tKi2ttbzP4gTJ07oo48%2BUnR0tKKjo1VeXq4ZM2bIZrOptrZWjzzyiIYPH67s7Gw/j9w3ioqKtHv3bm3YsEFhYWGe/0FERkbqsssukyTdcccd2rBhg4YNG6YhQ4Zo3bp1GjRokKZNm%2BbPofvEperR0tLS5%2BbI2rVrNWXKFA0ePFhnz57Vrl279N5772nz5s2S%2Btb8kC5ej744PyTp8ssvN9ynKElhYWHq37%2B/59EVfWmeXKoefXGePPTQQ8rNzVV8fLw%2B%2B%2BwzrV%2B/XsHBwZ63Sv01PwhYJjp8%2BLBuv/12WSwWWSwWPfTQQ5Kk2bNnq6ioSEePHtXOnTvV2NiouLg4ZWdna%2BHChb32voJnn31WFotFt912m2F7WVmZZs%2BeLUmaP3%2B%2Bzp8/r%2BXLl6upqUnjx4/Xpk2beuUzWy5VD6vV2ufmiMPh0KJFi1RfX6/IyEiNHDlSmzdv9nwyqi/ND%2Bni9fjiiy/63Py4kG%2Bu0vS1ebejXxgAAACJSURBVPJNX69HX3wd%2Beyzz1Tw/9u1gxoGYiAIghMINhVDMyqzM4M7AnlFI%2BVThWEfLc3unXtv5pxZa%2BWckzFGkv/dx%2Bf5NtgCAPAzP1gAAGUCCwCgTGABAJQJLACAMoEFAFAmsAAAygQWAECZwAIAKBNYAABlAgsAoExgAQCUCSwAgDKBBQBQ9gJ83yqR3dCdxQAAAABJRU5ErkJggg%3D%3D"/>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12" id="common4217530015064900364">
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">25</td>
+        <td class="number">1488</td>
+        <td class="number">8.4%</td>
+        <td>
+            <div class="bar" style="width:29%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">23</td>
+        <td class="number">1366</td>
+        <td class="number">7.7%</td>
+        <td>
+            <div class="bar" style="width:26%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">24</td>
+        <td class="number">1317</td>
+        <td class="number">7.4%</td>
+        <td>
+            <div class="bar" style="width:25%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">22</td>
+        <td class="number">1308</td>
+        <td class="number">7.4%</td>
+        <td>
+            <div class="bar" style="width:25%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">21</td>
+        <td class="number">1276</td>
+        <td class="number">7.2%</td>
+        <td>
+            <div class="bar" style="width:25%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">20</td>
+        <td class="number">1238</td>
+        <td class="number">7.0%</td>
+        <td>
+            <div class="bar" style="width:24%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">26</td>
+        <td class="number">1184</td>
+        <td class="number">6.7%</td>
+        <td>
+            <div class="bar" style="width:23%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">27</td>
+        <td class="number">1126</td>
+        <td class="number">6.4%</td>
+        <td>
+            <div class="bar" style="width:22%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">29</td>
+        <td class="number">1096</td>
+        <td class="number">6.2%</td>
+        <td>
+            <div class="bar" style="width:21%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">19</td>
+        <td class="number">1066</td>
+        <td class="number">6.0%</td>
+        <td>
+            <div class="bar" style="width:21%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (19)</td>
+        <td class="number">5216</td>
+        <td class="number">29.5%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12"  id="extreme4217530015064900364">
+            <p class="h4">Minimum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">16</td>
+        <td class="number">13</td>
+        <td class="number">0.1%</td>
+        <td>
+            <div class="bar" style="width:2%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">17</td>
+        <td class="number">258</td>
+        <td class="number">1.5%</td>
+        <td>
+            <div class="bar" style="width:21%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">18</td>
+        <td class="number">671</td>
+        <td class="number">3.8%</td>
+        <td>
+            <div class="bar" style="width:54%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">19</td>
+        <td class="number">1066</td>
+        <td class="number">6.0%</td>
+        <td>
+            <div class="bar" style="width:86%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">20</td>
+        <td class="number">1238</td>
+        <td class="number">7.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+            <p class="h4">Maximum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">40</td>
+        <td class="number">7</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">41</td>
+        <td class="number">3</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:43%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">43</td>
+        <td class="number">2</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:29%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">44</td>
+        <td class="number">2</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:29%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">47</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:15%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+    </div>
+</div>
+</div><div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_Club">Club<br/>
+            <small>Categorical</small>
+        </p>
+    </div><div class="col-md-3">
+    <table class="stats ">
+        <tr class="alert">
+            <th>Distinct count</th>
+            <td>647</td>
+        </tr>
+        <tr>
+            <th>Unique (%)</th>
+            <td>3.7%</td>
+        </tr>
+        <tr class="ignore">
+            <th>Missing (%)</th>
+            <td>0.0%</td>
+        </tr>
+        <tr class="ignore">
+            <th>Missing (n)</th>
+            <td>0</td>
+        </tr>
+    </table>
+</div>
+<div class="col-md-6 collapse in" id="minifreqtable4938553465929585489">
+    <table class="mini freq">
+        <tr class="">
+    <th>Olympique Lyonnais</th>
+    <td>
+        <div class="bar" style="width:1%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 0.2%">
+            &nbsp;
+        </div>
+        33
+    </td>
+</tr><tr class="">
+    <th>Chelsea</th>
+    <td>
+        <div class="bar" style="width:1%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 0.2%">
+            &nbsp;
+        </div>
+        33
+    </td>
+</tr><tr class="">
+    <th>OGC Nice</th>
+    <td>
+        <div class="bar" style="width:1%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 0.2%">
+            &nbsp;
+        </div>
+        33
+    </td>
+</tr><tr class="other">
+    <th>Other values (644)</th>
+    <td>
+        <div class="bar" style="width:100%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 99.4%">
+            17582
+        </div>
+        
+    </td>
+</tr>
+    </table>
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#freqtable4938553465929585489, #minifreqtable4938553465929585489"
+       aria-expanded="true" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="col-md-12 extrapadding collapse" id="freqtable4938553465929585489">
+    
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">Olympique Lyonnais</td>
+        <td class="number">33</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Chelsea</td>
+        <td class="number">33</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">OGC Nice</td>
+        <td class="number">33</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">VfL Wolfsburg</td>
+        <td class="number">33</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">AS Monaco</td>
+        <td class="number">33</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Everton</td>
+        <td class="number">33</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">ES Troyes AC</td>
+        <td class="number">33</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Brighton & Hove Albion</td>
+        <td class="number">33</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Bournemouth</td>
+        <td class="number">33</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Arsenal</td>
+        <td class="number">33</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (637)</td>
+        <td class="number">17351</td>
+        <td class="number">98.1%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+</div>
+</div><div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_ID">ID<br/>
+            <small>Numeric</small>
+        </p>
+    </div><div class="col-md-6">
+    <div class="row">
+        <div class="col-sm-6">
+            <table class="stats ">
+                <tr>
+                    <th>Distinct count</th>
+                    <td>17681</td>
+                </tr>
+                <tr>
+                    <th>Unique (%)</th>
+                    <td>100.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (n)</th>
+                    <td>0</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (n)</th>
+                    <td>0</td>
+                </tr>
+            </table>
+
+        </div>
+        <div class="col-sm-6">
+            <table class="stats ">
+
+                <tr>
+                    <th>Mean</th>
+                    <td>207640</td>
+                </tr>
+                <tr>
+                    <th>Minimum</th>
+                    <td>16</td>
+                </tr>
+                <tr>
+                    <th>Maximum</th>
+                    <td>241219</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Zeros (%)</th>
+                    <td>0.0%</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="col-md-3 collapse in" id="minihistogram-7726252232539263095">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABLCAYAAAA1fMjoAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAABhFJREFUeJzt3E9MU0kcB/Dvaw3VKLApFmz5E7OuMevFPSkmRtdoRNA0RuKioaB74%2BClXkRNVnbV6MEjIcZgMEaiLMFGIwH/BjzqZRP0ssGoVFqgW6mbbCiY198eyL5dXDPQl/Q9Wr6f28t0mGnyvq8zw8zTRERgsYmJCXR1daGurg7FxcVWN09Zxs77RbMjIETZwmF3B4gWMwaESGGZ3R2g3CUi0HU97XpOpxOapmWgR%2BljQChjdF3HT7/%2BhrfxqQXXWVu0Ar/88B2WLVsct%2Bbi6AXlrLfxKfw%2B9pfd3TCNcxAiBQaESIEBIVJgQIgUGBAiBQaESIEBIVJgQIgUGBAiBQaESIEBIVJgQIgUGBAiBe7mpXmZPddhps5iw4DQvMyc6wCAyq%2B/ylCPrMOA0IKYOddRUbQiQ72xDucgRAoMCJECA0KkwIAQKTAgRAoMCJECA0KkwIAQKTAgRAoMCJECt5osMWY2HubCpkOzGJAlxszGw1zYdGgWA7IEpbvxMBc2HZrFOQiRAgNCpMCAECkwIEQKDAiRAlexstRSfpGClRiQLLWUX6RgJQYkiy3VFylYiXMQIgUGhEiBQ6xFgBsIF6%2BcD4jZ1R4AcDqd0DQt423puo6fe4a4gXARsi0g4bE/0q4jmhO%2Bovy06ui6jo6BYYz/OZ1WvZICF378/hs4nc6Mt/Wtd1Van//HWhMTbl%2BhK%2B1xtZk6ZuuZ%2BU6ZpImIWN3oxMQEurq6UFdXh%2BLiYqubpyxj5/1iyyQ9FouhtbUVsVjMjuYpy9h5v3AVi0iBASFSYECIFBgQIgVbAuLxeHD8%2BHF4PB47mqcsY%2Bf9YssyL1G24BCLSIEBIVJgQIgUGBAiBQaESIEBIVJgQIgULD8P8u7dO5w8eRKTk5MoKCjApUuXsG7dOqu7QRk2MzODYDCI169fY/ny5SgqKkJLSwvKy8vR0NCASCSCgoICAMCBAwdw9OhRAEAymcSZM2cwNDQEh8OBYDCIqqoqALMH0s6fP49nz57B4XCgsbER9fX1RpttbW0IhULQNA3V1dUIBoNGWXd3N9rb2yEiqKysxNmzZxd21kcs1tjYKKFQSERE%2Bvv7pba21uoukAWmp6dlcHDQuL5586Y0NDSIiEggEJAnT558sV5ra6s0NzeLiEg4HJatW7dKIpEQEZFQKCTHjh0TEZFEIiE7d%2B6U4eFhERF5/vy57N%2B/X5LJpExPT8vBgwdlYGBARERGRkZk27ZtEo/HRUSkqalJOjs7F/Q9LB1iffjwAa9evYLf7wcAVFVVYWxsDOFw2MpukAXy8vKwfft243rTpk0YHR01rlOp1Bfr9fX14ciRIwCAsrIybN68GY8ePTLKDh06BAAoLCxEdXU17t%2B/b5T5/X64XC7k5eWhtrYWvb29AICHDx9i165dcLvdAIDDhw8bZfOxNCDRaBQejwcOx7/Ner1eRCIRK7tBNrhx4wZ2795tXF%2B%2BfBl%2Bvx8nTpyY84CMRCLw%2BXzGdWlpKaLRqFFWWlqadlk0Gp3zN8vKyoyy%2BeT8SxvIfleuXMHIyAjOnTsHYDYcJSUlAIDOzk40NTUt%2BIluNUt/QbxeL2Kx2Jyf18/TTbnl2rVrePz4Mdrb2%2BFyuQDACAcA1NfXIxwO4%2BPHjwBmn/z/HVGMjo7C6/UCAHw%2B35xh2kLLPh%2BlvH//3iibj6UBcbvd2LhxI%2B7evQsA6O/vx5o1a1BeXm5lN8giHR0d6O3tRUdHB1atmn1zi67riMfjxmcePHiA1atXo7CwEMDsvPTWrVsAgHA4jBcvXhhDs71796K7uxupVAqJRAJ9fX2oqakxyu7du4dkMomZmRn09PRg3759AIA9e/bg6dOniMfjEBHcvn3bqDcfy7e7v3nzBqdOncLk5CTy8/Nx8eJFrF%2B/3soukAXGx8exY8cOVFRUYOXKlRARuFwuXL9%2BHYFAAJ8%2BfYKmaXC73WhubsaGDRsAAFNTUzh9%2BjRevnwJp9M5Z5k3lUrhwoULGBwcNJZ5A4GA0WZbWxvu3LkDTdNQU1Pzv2Xeq1evQtM0bNmyBS0tLQta5uV5ECIF/iedSIEBIVL4GzDOBnOE8YFQAAAAAElFTkSuQmCC">
+
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#descriptives-7726252232539263095,#minihistogram-7726252232539263095"
+       aria-expanded="false" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="row collapse col-md-12" id="descriptives-7726252232539263095">
+    <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation" class="active"><a href="#quantiles-7726252232539263095"
+                                                  aria-controls="quantiles-7726252232539263095" role="tab"
+                                                  data-toggle="tab">Statistics</a></li>
+        <li role="presentation"><a href="#histogram-7726252232539263095" aria-controls="histogram-7726252232539263095"
+                                   role="tab" data-toggle="tab">Histogram</a></li>
+        <li role="presentation"><a href="#common-7726252232539263095" aria-controls="common-7726252232539263095"
+                                   role="tab" data-toggle="tab">Common Values</a></li>
+        <li role="presentation"><a href="#extreme-7726252232539263095" aria-controls="extreme-7726252232539263095"
+                                   role="tab" data-toggle="tab">Extreme Values</a></li>
+
+    </ul>
+
+    <div class="tab-content">
+        <div role="tabpanel" class="tab-pane active row" id="quantiles-7726252232539263095">
+            <div class="col-md-4 col-md-offset-1">
+                <p class="h4">Quantile statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Minimum</th>
+                        <td>16</td>
+                    </tr>
+                    <tr>
+                        <th>5-th percentile</th>
+                        <td>156300</td>
+                    </tr>
+                    <tr>
+                        <th>Q1</th>
+                        <td>192610</td>
+                    </tr>
+                    <tr>
+                        <th>Median</th>
+                        <td>214130</td>
+                    </tr>
+                    <tr>
+                        <th>Q3</th>
+                        <td>231510</td>
+                    </tr>
+                    <tr>
+                        <th>95-th percentile</th>
+                        <td>239810</td>
+                    </tr>
+                    <tr>
+                        <th>Maximum</th>
+                        <td>241219</td>
+                    </tr>
+                    <tr>
+                        <th>Range</th>
+                        <td>241203</td>
+                    </tr>
+                    <tr>
+                        <th>Interquartile range</th>
+                        <td>38902</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-4 col-md-offset-2">
+                <p class="h4">Descriptive statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Standard deviation</th>
+                        <td>32436</td>
+                    </tr>
+                    <tr>
+                        <th>Coef of variation</th>
+                        <td>0.15621</td>
+                    </tr>
+                    <tr>
+                        <th>Kurtosis</th>
+                        <td>8.9999</td>
+                    </tr>
+                    <tr>
+                        <th>Mean</th>
+                        <td>207640</td>
+                    </tr>
+                    <tr>
+                        <th>MAD</th>
+                        <td>23388</td>
+                    </tr>
+                    <tr class="">
+                        <th>Skewness</th>
+                        <td>-2.3035</td>
+                    </tr>
+                    <tr>
+                        <th>Sum</th>
+                        <td>3671341698</td>
+                    </tr>
+                    <tr>
+                        <th>Variance</th>
+                        <td>1052100000</td>
+                    </tr>
+                    <tr>
+                        <th>Memory size</th>
+                        <td>916.3 KiB</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-8 col-md-offset-2" id="histogram-7726252232539263095">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQCAYAAAByNR6YAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAAIABJREFUeJzs3XtUVPe9///XMGikIEQZOAaPtlGLiMoIiBcC9oCxHjWny6amVm1qqTFpjZK21CQKwQui1agJR6tLTerllCbGkrQ1MUlj2pp4ij0xCpjYxG8kMbQmGWY0XLwEGPbvD3%2BZ1QlqVfawGX0%2B1mKR7P2Z/XnvN%2BB%2B8Zk9g80wDEMAAAAwTYjVBQAAAFxvCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMmCImCdOXNGxcXFys7OltPp1LRp03TkyBG/MSUlJcrIyJDT6VROTo5OnDjht7%2BpqUlLlizRyJEjlZycrNzcXHk8Hr8xdXV1ysvLU2pqqtLS0pSfn6%2BzZ8%2B2u36Xy6V169bJ5XK1%2B1i4evTfWvTfWvTfWvTfWlb2PygCVn5%2Bvg4cOKBHH31Uzz//vG677Tbl5OT4GrZ582aVlpaqqKhIu3btUlhYmGbNmqWmpibfMYqLi7Vv3z6tW7dOpaWlcrlcmjdvnt88eXl5qq6u1rZt27Rp0yYdPHhQhYWF7a6/trZW69evV21tbbuPhatH/61F/61F/61F/61lZf87fcD67LPP9Morr2j%2B/PlKTU1Vnz59NHfuXPXt21dPPfWUJGnHjh2aM2eOsrKyFB8fr1WrVsnlcmnv3r2SpMbGRpWVlWnBggUaMWKEEhMTtXz5ch06dEhVVVWSpOPHj2v//v0qLi7W0KFDlZKSooKCAu3Zs4cfDAAAcFU6fcBqaWmR1%2BtV165d/bZ369ZNb775pmpqauR2uzVq1CjfvoiICDmdTlVUVEiSjhw5Iq/Xq9GjR/vG9OvXT3FxcTp8%2BLAkqaKiQlFRUUpMTPSNSU9Pl81mU2VlZSBPEQAAXGc6fcAKDw/XsGHDtGHDBrlcLrW2tup3v/udKioqVFtbK7fbLZvNJofD4fe46Ohoud1uSZLH41GXLl0UERFxyTFut1s9e/b022%2B32xUVFeUbAwAAcCVCrS7gSjz66KNauHChxowZo9DQUCUmJuqOO%2B7Q22%2B/bXVpbbhcrjZPKR4/ftyiagAAwMWuwzExMYqNjQ3YnEERsPr06aP/%2BZ//0fnz59XY2CiHw6Gf/OQn6tOnjxwOhwzDkNvt9lvF8ng8GjRokCTJ4XCoublZjY2NfqtYHo/H9xiHw6FTp075zev1elVXV9dmdexydu7cqfXr17fZfv/992vw4MFXdd4wx%2BDBg/Xuu%2B9aXcYNi/5bi/5bi/5ba/DgwUpLS9P8%2BfPb7Js7d26bF7uZKSgC1ue6deumbt26qa6uTvv379eDDz7oC1kHDhxQQkKCpAs3tVdWVmr69OmSpCFDhshut6u8vFzjxo2TJFVXV%2BvkyZNKTk6WJA0bNkz19fU6evSo7z6s8vJyGYYhp9N5xTVOnTpV2dnZbbbHxMSovv6cvN7WdvUAV89uD1FkZBj9twj9txb9txb9t5bdHqK1a9de9MVqMTExAZ07KALW/v37ZRiGbr31Vp04cUKPPvqo%2BvfvrzvvvFOSNHPmTG3cuFF9%2B/ZV7969VVJSol69emns2LGSLtz0PmXKFK1YsUKRkZEKDw/XsmXLlJKSoqSkJElS//79lZGRoYKCAi1evFjNzc0qKirSpEmTruqLEBsbe8klx9Onz6ilhR8wq3i9rfTfQvTfWvTfWvTfOpe7LgdSUASshoYGrV27Vp988omioqI0fvx4/fjHP5bdbpckzZ49W%2BfPn1dhYaEaGho0fPhwbdmyxe%2BVhwsXLpTdbldubq6ampqUmZmpRYsW%2Bc2zZs0aLV26VDk5OQoJCdH48eOVn5/foecKAACCn80wDMPqIm4UrGBZIzQ0RD16hNN/i9B/a9F/a9F/a33efyt0%2BrdpAAAACDYELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGSdPmC1trbq8ccf19ixY%2BV0OjVu3Dht2LChzbiSkhJlZGTI6XQqJydHJ06c8Nvf1NSkJUuWaOTIkUpOTlZubq48Ho/fmLq6OuXl5Sk1NVVpaWnKz8/X2bNnA3p%2BAAAElhHkH8Ep1OoC/pXNmzdr586dWrlypQYMGKC33npLDz/8sCIjI/Xd737XN6a0tFQrV65U79699fjjj2vWrFnas2ePunbtKkkqLi7W66%2B/rnXr1ikiIkJLly7VvHnz9Otf/9o3V15enjwej7Zt26bm5mYtWLBAhYWFWr16tSXnDgCAGR575Zg%2B8Jyzuoyr8pXoMP1kXLzVZVyzTh%2BwKioqNHbsWI0ZM0aSFBcXp%2Beff15VVVW%2BMTt27NCcOXOUlZUlSVq1apXS09O1d%2B9eTZw4UY2NjSorK9Njjz2mESNGSJKWL1%2BuiRMnqqqqSklJSTp%2B/Lj279%2BvZ599VomJiZKkgoIC3XfffXrooYcUExPTwWcOAIA5PvCc07GPz1hdxg2l0z9FmJycrPLycn3wwQeSpHfeeUeHDh3S1772NUlSTU2N3G63Ro0a5XtMRESEnE6nKioqJElHjhyR1%2BvV6NGjfWP69eunuLg4HT58WNKFIBcVFeULV5KUnp4um82mysrKQJ8mAAC4jnT6Fax7771XjY2NmjBhgux2u1pbW/XjH/9YkyZNkiS53W7ZbDY5HA6/x0VHR8vtdkuSPB6PunTpooiIiEuOcbvd6tmzp99%2Bu92uqKgo3xgAAIAr0ekD1p49e/T8889r7dq1GjBggP72t7%2BpuLhYsbGxmjx5stXlteFyuVRbW9tme0xMjLp1625BRbDbQ/w%2Bo2PRf2vRf2t1jv63Wjh3%2B4SG2tSeJ9vs9pDLXpdjY2PbUd3ldfqA9eijj%2Bree%2B/VhAkTJElf/epX9Y9//EObN2/W5MmT5XA4ZBiG3G633yqWx%2BPRoEGDJEkOh0PNzc1qbGz0W8XyeDy%2BxzgcDp06dcpvbq/Xq7q6ujarY5ezc%2BdOrV%2B/vs32uXPnat68eVd%2B4jBdZGSY1SXc0Oi/tei/tazsf0tLi2Vzt1f37mEKDW1fVNm%2B/QlLrsudPmCdO3dOdrvdb1tISIhaWy8k8j59%2BsjhcOjAgQNKSEiQJDU2NqqyslLTp0%2BXJA0ZMkR2u13l5eUaN26cJKm6ulonT55UcnKyJGnYsGGqr6/X0aNHffdhlZeXyzAMOZ3OK6536tSpys7ObrM9JiZG9fXn5PUG728SwcpuD1FkZBj9twj9txb9t1bn6H/wft0bGs6pvStYl7suB1KnD1jZ2dnauHGjevXqpQEDBujo0aPatm2b7rrrLt%2BYmTNnauPGjerbt6969%2B6tkpIS9erVS2PHjpV04ab3KVOmaMWKFYqMjFR4eLiWLVumlJQUJSUlSZL69%2B%2BvjIwMFRQUaPHixWpublZRUZEmTZp0VV%2BE2NjYSy45nj59Ri0twfuNHuy83lb6byH6by36by1r%2Bx%2B87yXV0mKovQHxctflQOr0AeuRRx5RSUmJlixZolOnTik2NlbTpk3TnDlzfGNmz56t8%2BfPq7CwUA0NDRo%2BfLi2bNniew8sSVq4cKHsdrtyc3PV1NSkzMxMLVq0yG%2BuNWvWaOnSpcrJyVFISIjGjx%2Bv/Pz8DjtXAABwfbAZhhG80TbIsIJljdDQEPXoEU7/LUL/rUX/rdU5%2Bm/ogacrg%2B59sOJ7havkO05Jtms%2Bxuf9twIvKwEAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAEzW6QNWdna2EhIS2nwUFRX5xpSUlCgjI0NOp1M5OTk6ceKE3zGampq0ZMkSjRw5UsnJycrNzZXH4/EbU1dXp7y8PKWmpiotLU35%2Bfk6e/Zsh5wjAAC4vnT6gFVWVqb//d//9X1s3bpVNptNEyZMkCRt3rxZpaWlKioq0q5duxQWFqZZs2apqanJd4zi4mLt27dP69atU2lpqVwul%2BbNm%2Bc3T15enqqrq7Vt2zZt2rRJBw8eVGFhYYeeKwAAuD50%2BoDVo0cPRUdH%2Bz7%2B%2BMc/qm/fvho%2BfLgkaceOHZozZ46ysrIUHx%2BvVatWyeVyae/evZKkxsZGlZWVacGCBRoxYoQSExO1fPlyHTp0SFVVVZKk48ePa//%2B/SouLtbQoUOVkpKigoIC7dmzR7W1tZadOwAACE6dPmD9s%2BbmZu3evVvf%2Bta3JEk1NTVyu90aNWqUb0xERIScTqcqKiokSUeOHJHX69Xo0aN9Y/r166e4uDgdPnxYklRRUaGoqCglJib6xqSnp8tms6mysrIjTg0AAFxHgipgvfLKK2psbNQ3v/lNSZLb7ZbNZpPD4fAbFx0dLbfbLUnyeDzq0qWLIiIiLjnG7XarZ8%2BefvvtdruioqJ8YwAAAK5UqNUFXI2ysjJlZmYqJibG6lIuyeVyXfRpxZiYGHXr1t2CimC3h/h9Rsei/9ai/9bqHP1vtXDu9gkNtak9a0F2e8hlr8uxsbHtqO7ygiZgnTx5UuXl5frFL37h2%2BZwOGQYhtxut98qlsfj0aBBg3xjmpub1djY6LeK5fF4fI9xOBw6deqU33xer1d1dXVtVsf%2BlZ07d2r9%2BvVtts%2BdO7fNjfXoWJGRYVaXcEOj/9ai/9aysv8tLS2Wzd1e3buHKTS0fVFl%2B/YnLLkuB03AKisrU3R0tL72ta/5tvXp00cOh0MHDhxQQkKCpAs3tVdWVmr69OmSpCFDhshut6u8vFzjxo2TJFVXV%2BvkyZNKTk6WJA0bNkz19fU6evSo7z6s8vJyGYYhp9N5VXVOnTpV2dnZbbbHxMSovv6cvN7g/U0iWNntIYqMDKP/FqH/1qL/1uoc/Q/er3tDwzm1dwXrctflQAqKgGUYhp577jndeeedCgnxb/TMmTO1ceNG9e3bV71791ZJSYl69eqlsWPHSrpw0/uUKVO0YsUKRUZGKjw8XMuWLVNKSoqSkpIkSf3791dGRoYKCgq0ePFiNTc3q6ioSJMmTbrqL0BsbOwllxxPnz6jlpbg/UYPdl5vK/23EP23Fv23lrX9Nyyat/1aWgy1NyBe7rocSEERsP7yl7/oo48%2B0p133tlm3%2BzZs3X%2B/HkVFhaqoaFBw4cP15YtW9S1a1ffmIULF8putys3N1dNTU3KzMzUokWL/I6zZs0aLV26VDk5OQoJCdH48eOVn58f8HMDAADXH5thGMEbbYMMK1jWCA0NUY8e4fTfIvTfWvTfWp2j/4YeeLpSxz4%2BY9H81ya%2BV7hKvuOUZLvmY3zefyvwshIAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTBUXA%2BuSTTzR//nyNHDlSTqdT3/jGN/T222/7jSkpKVFGRoacTqdycnJ04sQJv/1NTU1asmSJRo4cqeTkZOXm5srj8fiNqaurU15enlJTU5WWlqb8/HydPXs24OcHAACuL50%2BYNXX12vatGnq2rWrnnzySe3Zs0cPP/ywIiMjfWM2b96s0tJSFRUVadeuXQoLC9OsWbPU1NTkG1NcXKx9%2B/Zp3bp1Ki0tlcvl0rx58/zmysvLU3V1tbZt26ZNmzbp4MGDKiws7LBzBQAA14dOH7A2b96suLg4FRcXa8iQIerdu7fS09PVp08f35gdO3Zozpw5ysrKUnx8vFatWiWXy6W9e/dKkhobG1VWVqYFCxZoxIgRSkxM1PLly3Xo0CFVVVVJko4fP679%2B/eruLhYQ4cOVUpKigoKCrRnzx7V1tZacu4AACA4dfqA9ac//UlDhgzRAw88oPT0dH3zm9/Url27fPtramrkdrs1atQo37aIiAg5nU5VVFRIko4cOSKv16vRo0f7xvTr109xcXE6fPiwJKmiokJRUVFKTEz0jUlPT5fNZlNlZWWgTxMAAFxHOn3Aqqmp0VNPPaVbb71Vv/zlLzVt2jQtW7ZMv/3tbyVJbrdbNptNDofD73HR0dFyu92SJI/Hoy5duigiIuKSY9xut3r27Om33263KyoqyjcGAADgSoRaXcC/0traqqSkJP34xz%2BWJCUkJOjYsWN6%2BumnNXnyZIura8vlcl30KcWYmBh169bdgopgt4f4fUbHov/Wov/W6hz9b7Vw7vYJDbWpPWtBdnvIZa/LsbGx7aju8jp9wIqNjVX//v39tvXv31%2BvvPKKJMnhcMgwDLndbr9VLI/Ho0GDBvnGNDc3q7Gx0W8Vy%2BPx%2BB7jcDh06tQpv3m8Xq/q6urarI5dzs6dO7V%2B/fo22%2BfOndvmpnp0rMjIMKtLuKHRf2vRf2tZ2f%2BWlhbL5m6v7t3DFBravqiyffsTllyXO33ASk5O1vvvv%2B%2B37f3331dcXJwkqU%2BfPnI4HDpw4IASEhIkXbipvbKyUtOnT5ckDRkyRHa7XeXl5Ro3bpwkqbq6WidPnlRycrIkadiwYaqvr9fRo0d992GVl5fLMAw5nc4rrnfq1KnKzs5usz0mJkb19efk9QbvbxLBym4PUWRkGP23CP23Fv23Vufof/B%2B3Rsazqm9K1iXuy4HUqcPWN///vc1bdo0bdq0SRMmTFBlZaV27dqlZcuW%2BcbMnDlTGzduVN%2B%2BfdW7d2%2BVlJSoV69eGjt2rKQLN71PmTJFK1asUGRkpMLDw7Vs2TKlpKQoKSlJ0oVVsYyMDBUUFGjx4sVqbm5WUVGRJk2adFVfhNjY2EsuOZ4%2BfUYtLcH7jR7svN5W%2Bm8h%2Bm8t%2Bm8ta/tvWDRv%2B7W0GGpvQLzcdTmQOn3AGjp0qH7xi19o9erV2rBhg/793/9d%2Bfn5mjRpkm/M7Nmzdf78eRUWFqqhoUHDhw/Xli1b1LVrV9%2BYhQsXym63Kzc3V01NTcrMzNSiRYv85lqzZo2WLl2qnJwchYSEaPz48crPz%2B%2BwcwUAANcHm2EYwRttgwwrWNYIDQ1Rjx7h9N8i9N9a9N9anaP/hh54ulLHPj5j0fzXJr5XuEq%2B45Rku%2BZjfN5/K/CyEgAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATBaQgNXY2BiIwwIAAASFgASsjIwMPfzww3rjjTcCcXgAAIBOLSABKy8vT%2B%2B%2B%2B67uvvtuff3rX9emTZv0ySefBGIqAACATicgAevuu%2B/Wc889p2effVZjxozR1q1blZ2drXvvvVevvPKKWlpaAjEtAABApxDQm9wTExNVUFCg119/XatXr1Z9fb1yc3M1ZswYrVy5UjU1NYGcHgAAwBIBfxWhYRgqLy/XSy%2B9pLfffls9e/ZUVlaWXnrpJU2YMEG/%2Bc1vAl0CAABAhwoN1IFrampUVlam3/72t3K5XEpPT9eaNWuUnZ2t0NBQtba26tFHH9Vjjz2mKVOmBKoMAACADheQgHX33XfrzTffVExMjL71rW9pypQpiouL8xsTEhKiCRMmaOvWrYEoAQAAwDIBCVjdu3fXhg0bNGbMGIWEXPpZyISEBP3hD38IRAkAAACWCUjA2rBhwxWN69q1q/r27RuIEgAAACwTkJvcX3zxRf3yl7%2B86L6tW7fq5ZdfDsS0AAAAnUJAAtamTZtkt9svuq9Lly7atGlTIKYFAADoFAISsE6cOKH4%2BPiL7hswYIDef//9QEwLAADQKQQkYHXp0kWnTp266D63233J1S0AAIDrQUAC1vDhw7VlyxadP3/eb/v58%2Bf15JNPKi0t7YqPtX79eiUkJPh9TJw40W9MSUmJMjIy5HQ6lZOToxMnTvjtb2pq0pIlSzRy5EglJycrNzdXHo/Hb0xdXZ3y8vKUmpqqtLQ05efn6%2BzZs1d55gAAAAF6FeFPf/pTTZ06VbfffrsmTJig2NhYuVwuvfTSSzp37pweffTRqzreV7/6VW3fvl2GYUiS3wrY5s2bVVpaqpUrV6p37956/PHHNWvWLO3Zs0ddu3aVJBUXF%2Bv111/XunXrFBERoaVLl2revHn69a9/7TtOXl6ePB6Ptm3bpubmZi1YsECFhYVavXq1CR0BAAA3koCsYA0YMEC/%2Bc1vNHz4cO3evVtr167V7t27lZaWpmeeeUYDBgy4quOFhoaqZ8%2Beio6OVnR0tG6%2B%2BWbfvh07dmjOnDnKyspSfHy8Vq1aJZfLpb1790qSGhsbVVZWpgULFmjEiBFKTEzU8uXLdejQIVVVVUmSjh8/rv3796u4uFhDhw5VSkqKCgoKtGfPHtXW1prXGAAAcEMI2J/KufXWW/X444%2BbcqwPPvhAmZmZuummmzRs2DDl5eXplltuUU1Njdxut0aNGuUbGxERIafTqYqKCk2cOFFHjhyR1%2BvV6NGjfWP69eunuLg4HT58WElJSaqoqFBUVJQSExN9Y9LT02Wz2VRZWanbb7/dlPMAAAQz4xoe06qWlhZJrdf4eDNYNe%2BNLWAByyxOp1M///nPdeutt6q2tlbr1q3TjBkz9Pzzz8vtdstms8nhcPg9Jjo6Wm63W5Lk8XjUpUsXRUREXHKM2%2B1Wz549/fbb7XZFRUX5xgAA8Ngrx/SB55zVZVyVUf1u/teDYLqABCzDMFRWVqaXX35ZH3/8sZqamtqMudI3G83MzPT9d3x8vJKSkpSVlaUXX3xR/fr1M61ms7hcros%2BrRgTE6Nu3bpbUBHs9hC/z%2BhY9N9a9N9MrfrAc07HPj5jdSFXpW90mNUlXLPQUJvaczeT3R5y2etybGxsO6q7vIAErDVr1uiJJ55QSkqKkpOT1aVLF9OO3b17d33lK1/Rhx9%2BqBEjRsgwDLndbr9VLI/Ho0GDBkmSHA6Hmpub1djY6LeK5fF4fI9xOBxt3lbC6/Wqrq6uzerYv7Jz506tX7%2B%2Bzfa5c%2Bdq3rx5V3UsmCsyMnj/kbke0H9r0f/2u/BUHzpS9%2B5hCg1tX1TZvv0JS67LAQlYv/3tbzV37lzNnTvX9GOfOXNGH374ob75zW%2BqT58%2BcjgcOnDggBISEiRduKm9srJS06dPlyQNGTJEdrtd5eXlGjdunCSpurpaJ0%2BeVHJysiRp2LBhqq%2Bv19GjR333YZWXl8swDDmdzquqb%2BrUqcrOzm6zPSYmRvX15%2BT1tl7zuePa2O0hiowMo/8Wof/Wov9mon8draHhnNq7gnW563IgBSRgffbZZ0pNTTXlWCtXrlR2drbi4uL0ySefaN26dQoNDfW9F9bMmTO1ceNG9e3bV71791ZJSYl69eqlsWPHSrpw0/uUKVO0YsUKRUZGKjw8XMuWLVNKSoqSkpIkSf3791dGRoYKCgq0ePFiNTc3q6ioSJMmTbrqL0BsbOwllxxPnz6jlhZ%2BQK3i9bbSfwvRf2vRfzNws3hHa2kx1N5ge7nrciAFJGDdcccd2rdvn98r967VJ598ory8PH366afq2bOnUlNTtXPnTvXo0UOSNHv2bJ0/f16FhYVqaGjwvcnp5%2B%2BBJUkLFy6U3W5Xbm6umpqalJmZqUWLFvnNs2bNGi1dulQ5OTkKCQnR%2BPHjlZ%2Bf3%2B76AQDAjcdmfP7unSZ64YUXtHbtWqWkpOi2225T9%2B5tb%2B7%2BfIXpRsIKljVCQ0PUo0c4/bcI/bcW/TeToQeergy6m9xvH%2BzQh0F4c358r3CVfMcpyXbNx/j8%2B98KAVnBysvLkyT94x//0O7du9vst9ls%2Btvf/haIqQEAACwXkID1hz/8IRCHBQAACAoBCVh9%2B/YNxGEBAACCQkDfyf0vf/mLjhw5oo8%2B%2Bkj33XefbrnlFr355pvq06ePJXf0AwAAdISABKxTp05p3rx5OnTokGJiYlRbW6u77rpLt9xyi3bu3KmIiAgVFhYGYmoAAADLBeRvJyxfvlwul0u/%2B93v9Mc//lH//ELF9PR0lZeXB2JaAACATiEgAWvfvn36yU9%2Bovj4eNls/i%2BvjIuL08cffxyIaQEAADqFgASslpYWhYdf/H0n6uvr2/13hQAAADqzgASsoUOH6tlnn73ovhdffFEpKSmBmBYAAKBTCMhS0gMPPKDvf//7%2Bt73vqfx48fLZrPpT3/6k5588knt3btXpaWlgZgWAACgUwjIClZqaqq2bt2qpqYmLVu2TIZh6Be/%2BIX%2B/ve/65e//KWGDh0aiGkBAAA6hYDdDDV8%2BHA9/fTTOnv2rD799FNFRkYqIiIiUNMBAAB0GgG/2/xLX/qSvvSlLwV6GgAAgE4jIAHrkUce%2BZdjioqKAjE1AACA5QISsCoqKtpsq6urU21trW6%2B%2BWY5HI5ATAsAANApBCRg7d69%2B6Lbjx07pvnz56ugoCAQ0wIAAHQKAXkV4aXEx8frnnvuUXFxcUdOCwAA0KE6NGBJUmRkpE6cONHR0wIAAHSYgDxF2NjY2GZbU1OTqqurVVJSogEDBgTXmlrkAAAgAElEQVRiWgAAgE4hIAFr%2BPDhbf7IsyQZhqHY2Fht2LAhENMCAAB0CgEJWBd7C4abbrpJvXr1UnJysrp06RKIaQEAADqFgASsu%2B66KxCHBQAACAodfpM7AADA9S4gK1iDBw%2B%2B6D1Yl/LWW28FogwAAABLBCRgPfDAAyotLZXdbld2drYcDofcbrdeffVVGYahGTNmyG63B2JqAAAAywUkYDU0NCghIUEbNmzwC1ILFizQj370I3366aeaP3/%2BNR178%2BbNWrt2rWbOnKkFCxb4tpeUlGjXrl1qaGhQSkqKFi9erC9/%2Bcu%2B/U1NTVqxYoX27NmjpqYmZWZmatGiRYqOjvaNqaur09KlS/XnP/9ZISEh%2BvrXv678/Hz%2BWDUAALgqAbkH69lnn73oKpXdbteMGTP07LPPXtNxq6qqtHPnTiUkJPht37x5s0pLS1VUVKRdu3YpLCxMs2bNUlNTk29McXGx9u3bp3Xr1qm0tFQul0vz5s3zO05eXp6qq6u1bds2bdq0SQcPHlRhYeE11QoAAG5cAQlYZ8%2Be1UcffXTRfR999JE%2B%2B%2Byzqz7mmTNnNH/%2BfC1btkzdu3f327djxw7NmTNHWVlZio%2BP16pVq%2BRyubR3715JF974tKysTAsWLNCIESOUmJio5cuX69ChQ6qqqpIkHT9%2BXPv371dxcbGGDh2qlJQUFRQUaM%2BePaqtrb3qegEAwI0rIAFr7NixWr16tX7/%2B9/r7Nmzki6Ert/97ndas2aNsrOzr/qYS5cuVXZ2tkaPHu23vaamRm63W6NGjfJti4iIkNPpVEVFhSTpyJEj8nq9fo/t16%2Bf4uLidPjwYUlSRUWFoqKilJiY6BuTnp4um82mysrKq64XAADcuAJyD9aiRYv00EMP6cEHH5TNZtNNN92kzz77TIZhKCsrS4sWLbqq473wwgv629/%2BprKysjb73G63bDabHA6H3/bo6Gi53W5JksfjUZcuXRQREXHJMW63Wz179vTbb7fbFRUV5RsDAABwJQISsLp3764NGzbo3XffVVVVldxut2JiYjR06FANHDjwqo718ccfa/ny5dq6dWtQvAO8y%2BW66FOKMTEx6tat%2B0UegUCz20P8PqNj0X9r0X8ztVpdwA0nNNSm9jzZZreHXPa6HBsb247qLi8gAetzAwcOvOpA9UVvvfWWTp06pTvvvFOGYUiSvF6vDh48qNLSUr344osyDENut9tvFcvj8WjQoEGSJIfDoebmZjU2NvqtYnk8Ht9jHA6HTp065Te31%2BtVXV1dm9Wxy9m5c6fWr1/fZvvcuXPb3FSPjhUZGWZ1CTc0%2Bm8t%2Bt9%2BLS0tVpdww%2BnePUyhoe2LKtu3P2HJdTlgAaulpUXPPfecjhw5oo8%2B%2BkgFBQX68pe/rJdeeknx8fHq16/fFR0nPT1du3fv9tv28MMPq3///rr33nvVp08fORwOHThwwPfqwsbGRlVWVmr69OmSpCFDhshut6u8vFzjxo2TJFVXV%2BvkyZNKTk6WJA0bNkz19fU6evSo7z6s8vJyGYYhp9N5xec9derUi95jFhMTo/r6c/J6%2BQ2oo9ntIYqMDKP/FqH/1qL/ZqJ/Ha2h4Zzau4J1uetyIAUkYNXU1OgHP/iB3G63Bg4cqMrKSjU2Nkq6EFr27dunFStWXNGxvvSlL2nAgAF%2B28LCwnTzzTerf//%2BkqSZM2dq48aN6tu3r3r37q2SkhL16tVLY8eOlXThpvcpU6ZoxYoVioyMVHh4uJYtW6aUlBQlJSVJkvr376%2BMjAwVFBRo8eLFam5uVlFRkSZNmnRVX4TY2NhLLjmePn1GLS38gFrF622l/xai/9ai/2YwrC7ghtPSYqi9wfZy1%2BVACkjAKi4uVmRkpJ5%2B%2BmlFRUVpyJAhvn0jR47UY4891q7jf/HP8MyePVvnz59XYWGhGhoaNHz4cG3ZskVdu3b1jVm4cKHsdrtyc3P93mj0n61Zs0ZLly5VTk6OQkJCNH78eOXn57erVgAAcOMJSMD661//qtWrVys6Olper9dvX0xMjFwuV7uOv2PHjjbb5s2bd9nnUrt27apHHnlEjzzyyCXHREZGavXq1e2qDQAAICAvKwkJCfHdkP5FbrebPz0DAACuawEJWGlpadqxY4ffKy4%2Bf1rvN7/5jd%2BbggIAAFxvAvIUYV5enqZNm6ZJkybp9ttvl81m09NPP61jx46purpazzzzTCCmBQAA6BQCsoL11a9%2BVWVlZRoyZIjvDzu//PLLuuWWW/TMM8/oK1/5SiCmBQAA6BRMX8EyDENnzpxRXFyc1qxZY/bhAQAAOj3TV7Cam5s1YsQI7d%2B/3%2BxDAwAABAXTA1bXrl31b//2b5d8FSEAAMD1LiD3YE2bNk3btm1TU1NTIA4PAADQqQXkVYRut1vV1dXKysrSqFGjFB0d7ffu6zabTQ8//HAgpgYAALBcQALWyy%2B/LLvdLkk6ePBgm/0ELAAAcD0LSMDat29fIA4LAAAQFEy7B%2Bu//uu/dOzYMb9tu3fvVn19vVlTAAAABAXTAtb/%2B3//T%2BfPn/f9v9fr1YMPPqiamhqzpgAAAAgKAXkV4ed4qwYAAHAjCmjAAgAAuBEFPGD989szAAAA3AhMfRXhzJkz2wSqGTNmtNlms9n05ptvmjk1AABAp2FawJo7d65ZhwIAAAhqBCwAAACTcZM7AACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMk6fcB66qmn9I1vfEOpqalKTU3Vd77zHb322mt%2BY0pKSpSRkSGn06mcnBydOHHCb39TU5OWLFmikSNHKjk5Wbm5ufJ4PH5j6urqlJeXp9TUVKWlpSk/P19nz54N%2BPkBAIDrT6cPWLfccot%2B9rOf6bnnntOzzz6rkSNHas6cOTp%2B/LgkafPmzSotLVVRUZF27dqlsLAwzZo1S01NTb5jFBcXa9%2B%2BfVq3bp1KS0vlcrk0b948v3ny8vJUXV2tbdu2adOmTTp48KAKCws79FwBAMD1odMHrP/4j//QmDFj1LdvX335y1/WT37yE4WHh6uiokKStGPHDs2ZM0dZWVmKj4/XqlWr5HK5tHfvXklSY2OjysrKtGDBAo0YMUKJiYlavny5Dh06pKqqKknS8ePHtX//fhUXF2vo0KFKSUlRQUGB9uzZo9raWsvOHQAABKdOH7D%2BWWtrq1544QWdO3dOycnJqqmpkdvt1qhRo3xjIiIi5HQ6fQHsyJEj8nq9Gj16tG9Mv379FBcXp8OHD0uSKioqFBUVpcTERN%2BY9PR02Ww2VVZWdtDZAQCA64Wpf4swUI4dO6apU6eqqalJ4eHhWr9%2Bvfr166fDhw/LZrPJ4XD4jY%2BOjpbb7ZYkeTwedenSRREREZcc43a71bNnT7/9drtdUVFRvjEAAABXKigCVr9%2B/fT73/9eDQ0Nevnll/XQQw/pV7/6ldVlXZTL5bro04oxMTHq1q27BRXBbg/x%2B4yORf%2BtRf/N1Gp1ATec0FCb2vNkm90ectnrcmxsbDuqu7ygCFihoaHq06ePJCkxMVFVVVXasWOH7rnnHhmGIbfb7beK5fF4NGjQIEmSw%2BFQc3OzGhsb/VaxPB6P7zEOh0OnTp3ym9Pr9aqurq7N6ti/snPnTq1fv77N9rlz57a5sR4dKzIyzOoSbmj031r0v/1aWlqsLuGG0717mEJD2xdVtm9/wpLrclAErC9qbW1VU1OT%2BvTpI4fDoQMHDighIUHShZvaKysrNX36dEnSkCFDZLfbVV5ernHjxkmSqqurdfLkSSUnJ0uShg0bpvr6eh09etR3H1Z5ebkMw5DT6byq2qZOnars7Ow222NiYlRff05eL78BdTS7PUSRkWH03yL031r030z0r6M1NJxTe1ewLnddDqROH7DWrl2rMWPG6JZbbtGZM2e0e/duvfHGG3ryySclSTNnztTGjRvVt29f9e7dWyUlJerVq5fGjh0r6cJN71OmTNGKFSsUGRmp8PBwLVu2TCkpKUpKSpIk9e/fXxkZGSooKNDixYvV3NysoqIiTZo06aq/ALGxsZdccjx9%2BoxaWvgBtYrX20r/LUT/rUX/zWBYXcANp6XFUHuD7eWuy4HU6QOWx%2BPRQw89pNraWnXv3l0DBw7Uk08%2B6XtV4OzZs3X%2B/HkVFhaqoaFBw4cP15YtW9S1a1ffMRYuXCi73a7c3Fw1NTUpMzNTixYt8ptnzZo1Wrp0qXJychQSEqLx48crPz%2B/Q88VAABcH2yGYRDJOwgrWNYIDQ1Rjx7h9N8i9N9a9N9Mhh54ulLHPj5jdSFX5fbBDn3oORd0dcf3ClfJd5ySbNd8jM%2B//63Ay0oAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATNbp36YBAHA9CeYXrgdz7ehoBCwAQId67JVj%2BsBzzuoyrtqofjdbXQKCCAELANChPgjC92SSpL7R/D1HXDnuwQIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwWacPWJs2bdKUKVOUkpKi9PR03X///Xr//ffbjCspKVFGRoacTqdycnJ04sQJv/1NTU1asmSJRo4cqeTkZOXm5srj8fiNqaurU15enlJTU5WWlqb8/HydPXs2oOcHAACuP50%2BYB08eFDf/e53tWvXLm3dulUtLS2aNWuWzp8/7xuzefNmlZaWqqioSLt27VJYWJhmzZqlpqYm35ji4mLt27dP69atU2lpqVwul%2BbNm%2Bc3V15enqqrq7Vt2zZt2rRJBw8eVGFhYYedKwAAuD50%2BoC1ZcsWTZ48Wf3799fAgQO1YsUKnTx5Um%2B99ZZvzI4dOzRnzhxlZWUpPj5eq1atksvl0t69eyVJjY2NKisr04IFCzRixAglJiZq%2BfLlOnTokKqqqiRJx48f1/79%2B1VcXKyhQ4cqJSVFBQUF2rNnj2pray05dwAAEJw6fcD6ooaGBtlsNt18882SpJqaGrndbo0aNco3JiIiQk6nUxUVFZKkI0eOyOv1avTo0b4x/fr1U1xcnA4fPixJqqioUFRUlBITE31j0tPTZbPZVFlZ2RGnBgAArhNBFbAMw9Dy5cuVmpqqAQMGSJLcbrdsNpscDoff2OjoaLndbkmSx%2BNRly5dFBERcckxbrdbPXv29Ntvt9sVFRXlGwMAAHAlQq0u4GosXrxY7733np566imrS7kkl8t10acUY2Ji1K1bdwsqgt0e4vcZHYv%2BW6vz9b/V6gIQREJDbWrPWpDdHnLZ63JsbGw7qru8oAlYS5cu1WuvvabS0lK/hjgcDhmGIbfb7beK5fF4NGjQIN%2BY5uZmNTY2%2Bq1ieTwe32McDodOnTrlN6fX61VdXV2b1bHL2blzp9avX99m%2B9y5c9vcVI%2BOFRkZZnUJNzT6b63O0v%2BWlharS0AQ6d49TKGh7Ysq27c/Ycl1OSgC1tKlS/Xqq6/qV7/6leLi4vz29enTRw6HQwcOHFBCQoKkCze1V1ZWavr06ZKkIUOGyG63q7y8XOPGjZMkVVdX6%2BTJk0pOTpYkDRs2TPX19Tp69KjvPqzy8nIZhiGn03nFtU6dOlXZ2dlttsfExKi%2B/py8Xn5762h2e4giI8Pov0Xov7U6X/87Qw0IFg0N59TeFazLXZcDqdMHrMWLF%2BuFF17Qxo0bFRYW5rsfqnv37rrpppskSTNnztTGjRvVt29f9e7dWyUlJerVq5fGjh0r6cJN71OmTNGKFSsUGRmp8PBwLVu2TCkpKUpKSpIk9e/fXxkZGSooKNDixYvV3NysoqIiTZo06aq%2BCLGxsZdccjx9%2BoxaWvjHxSpebyv9txD9t1bn6b9hdQEIIi0thtobyi93XQ6kTh%2Bwnn76adlsNt19991%2B21esWKHJkydLkmbPnq3z58%2BrsLBQDQ0NGj58uLZs2aKuXbv6xi9cuFB2u125ublqampSZmamFi1a5HfMNWvWaOnSpcrJyVFISIjGjx%2Bv/Pz8wJ8kAAC4rtgMw%2BDXiQ7CCpY1QkND1KNHOP23CP23Vufrv6EHnq7UsY/PWF3IVbt9sEMfes4FXe3BWnd8r3CVfMcpyXbNx/j8%2B98KneVlJQAAANcNAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJgsKALWwYMH9cMf/lCZmZlKSEjQq6%2B%2B2mZMSUmJMjIy5HQ6lZOToxMnTvjtb2pq0pIlSzRy5EglJycrNzdXHo/Hb0xdXZ3y8vKUmpqqtLQ05efn6%2BzZswE9NwC4NsYVfrSqpaVFUutVPCbQH8D1L9TqAq7E2bNnNWjQIE2ZMkXz5s1rs3/z5s0qLS3VypUr1bt3bz3%2B%2BOOaNWuW9uzZo65du0qSiouL9frrr2vdunWKiIjQ0qVLNW/ePP3617/2HScvL08ej0fbtm1Tc3OzFixYoMLCQq1evbrDzhUArtRjrxzTB55zVpdxVUb1u9nqEoAOERQBa8yYMRozZowkyTDa/vazY8cOzZkzR1lZWZKkVatWKT09XXv37tXEiRPV2NiosrIyPfbYYxoxYoQkafny5Zo4caKqqqqUlJSk48ePa//%2B/Xr22WeVmJgoSSooKNB9992nhx56SDExMR10tgBwZT7wnNOxj89YXcZV6RsdZnUJQIcIiqcIL6empkZut1ujRo3ybYuIiJDT6VRFRYUk6ciRI/J6vRo9erRvTL9%2B/RQXF6fDhw9LkioqKhQVFeULV5KUnp4um82mysrKDjobAABwPQj6gOV2u2Wz2eRwOPy2R0dHy%2B12S5I8Ho%2B6dOmiiIiIS45xu93q2bOn33673a6oqCjfGAAAgCsRFE8RBhOXy6Xa2to222NiYtStW3cLKoLdHuL3GR2L/gdKq9UFAAEXGmpTe9aC7PaQy16XY2Nj21Hd5QV9wHI4HDIMQ263228Vy%2BPxaNCgQb4xzc3Namxs9FvF8ng8vsc4HA6dOnXK79her1d1dXVtVscuZ%2BfOnVq/fn2b7XPnzr3oDfroOJGR3PthJfpvrguvDASub927hyk0tH1RZfv2Jyy5Lgd9wOrTp48cDocOHDighIQESVJjY6MqKys1ffp0SdKQIUNkt9tVXl6ucePGSZKqq6t18uRJJScnS5KGDRum%2Bvp6HT161HcfVnl5uQzDkNPpvOJ6pk6dquzs7DbbY2JiVF9/Tl4vv3V2NLs9RJGRYfTfIvQ/UOglrn8NDefU3hWsy12XAykoAtbZs2f14Ycf%2Bl5BWFNTo3feeUdRUVG65ZZbNHPmTG3cuFF9%2B/ZV7969VVJSol69emns2LGSLtz0PmXKFK1YsUKRkZEKDw/XsmXLlJKSoqSkJElS//79lZGRoYKCAi1evFjNzc0qKirSpEmTruqLEBsbe8klx9Onz6ilhX8UreL1ttJ/C9F/s/F%2BUrj%2BtbRceC%2B39rjcdTmQgiJgvfXWW/re974nm80mm82mlStXSpImT56sFStWaPbs2Tp//rwKCwvV0NCg4cOHa8uWLb73wJKkhQsXym63Kzc3V01NTcrMzNSiRYv85lmzZo2WLl2qnJwchYSEaPz48crPz%2B/QcwUAAMHPZlzsjaUQEKxgWSM0NEQ9eoTTf4vQ/0Ax9MDTlUH3Pli3D3bowyB8/y4peGsP1rrje4Wr5DtOSbZrPsbn//5YgZf1AAAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGCyUKsLAABrGVYXcI2CtW7gxkDAAnDDe%2ByVY/rAc87qMq7KqH43W10CgMsgYAG44X3gOadjH5%2Bxuoyr0jc6zOoSAFwG92ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgXURpaamys7OVlJSkb3/726qqqrK6JAAAEEQIWF%2BwZ88e/fznP1dubq6ee%2B45JSQk6J577tGpU6esLg1Xxfinj1a1tLRIav3C9s78AQAIZrxNwxds27ZNU6dO1eTJkyVJS5Ys0Z///GeVlZVp9uzZ13xcwwjmi6fN6gKuSTC%2Bt9FXosP0k3HxVpdxDS73ff3FgNvZdMaaAAQ7AtY/aW5u1ttvv6377rvPt81msyk9PV0VFRXtOvazB47r5OnzQfdveWZ8tHrfHGF1GdckGN/bKJgFY6CVeMNOAIFBwPonp0%2BfltfrlcPh8NseHR2t999/v13HfqnKpcMf1rfrGB0tNMSmzPhoBV0qlBScNQe3YA20vGEngEAgYJnM5XKptra2zfZ/79lNZ5q8FlR07fpGh%2BlA9Sl9Uv%2BR1aVctUG3ROgrQXjh/Ep0mEKD9KcyGPstSXFRNwXlzajU3fGCtfZgrfvCv4c2ted2cbs95JLX5ZiYGMXGxrajwssL0n/KA6NHjx6y2%2B1yu91%2B2z0eT5tVrUvZuXOn1q9f32Z7WlqaHl%2B7NqBfTPj79v//2eVyaefOnZo6dSr9D6Dl04dfdDv9txb9txb9t5bL5dJPf/pTvfHGG232zZ07V/PmzQvY3ASsf9KlSxcNHjxY5eXlGjt2rKQLN6eXl5fr7rvvvqJjTJ06VdnZ2X7bjh8/rvnz56u2tpYfMAvU1tZq/fr1ys7Opv8WoP/Wov/Wov/Wqq2t1RtvvKFHH31U/fv399sXExMT0LkJWF/w/e9/XwsWLNCQIUM0dOhQbd%2B%2BXefPn9edd955RY%2BPjY3lhwgAgE6kf//%2BGjx4cIfOScD6gokTJ%2Br06dP67//%2Bb7ndbg0aNEhPPPGEevbsaXVpAAAgSBCwLmLGjBmaMWOG1WUAAIAgFYwvLAAAAOjU7IsXL15sdRE3gvDwcI0YMULh4eFWl3JDov/Wov/Wov/Wov/Wsqr/NuPC33ABAACASXiKEAAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQErwEpLS5Wdna2kpCR9%2B9vfVlVVldUldXrr169XQkKC38fEiRP9xpSUlCgjI0NOp1M5OTk6ceKE3/6mpiYtWbJEI0eOVHJysnJzc%2BXxePzG1NXVKS8vT6mpqUpLS1N%2Bfr7Onj3rN%2Bajjz7Svffeq2HDhum2227TqlWr1NraGpgTt8jBgwf1wx/%2BUJmZmUpISNCrr77aZkxn6vc777yjGTNmKCkpSVlZWXriiSdM6oQ1/lX/FyxY0ObnYfbs2X5j6P%2B12bRpk6ZMmaKUlBSlp6fr/vvv1/vvv99mHN//gXEl/Q/q738DAfPCCy8YQ4YMMZ577jnjvffeMx555BEjLS3N8Hg8VpfWqa1bt8644447DI/HY7jdbsPtdhunT5/27d%2B0aZORlpZm/PGPfzTeffdd40c/%2BpExduxY47PPPvONKSwsNLKysoy//vWvxttvv21MnTrVmDZtmt88s2bNMiZPnmxUVVUZb775pvH1r3/dyMvL8%2B33er3GHXfcYfzgBz8w3nnnHeO1114zRo0aZaxduzbwTehA%2B/btMx5//HHjlVdeMRISEoy9e/f67e9M/W5oaDBuu%2B0248EHHzTee%2B8944UXXjCcTqfxzDPPBKg7gfev%2Bv/www8bs2fP9vt5qK%2Bv9xtD/6/NPffc4/v3%2BZ133jHuvfdeIysryzh37pxvDN//gXMl/Q/m738CVgDdddddRlFRke//W1tbjczMTGPz5s0WVtX5rVu3zpg8efIl9992223G1q1bff/f0NBgDB061HjhhRd8/z948GDjD3/4g2/M8ePHjYEDBxqVlZWGYRjGe%2B%2B9ZwwcONB4%2B%2B23fWNee%2B01Y9CgQYbL5TIMwzD%2B/Oc/G4mJiX6B%2BKmnnjKGDx9uNDc3m3Kunc3AgQPbXOA7U79LS0uNESNG%2BPV/9erVxoQJE0zqgLUu1v%2BHH37YuP/%2B%2By/5GPpvHo/HYwwcONB44403fNv4/u84F%2Bt/MH//8xRhgDQ3N%2Bvtt9/W6NGjfdtsNpvS09NVUVFhYWXB4YMPPlBmZqZuv/12/exnP9NHH30kSaqpqZHb7daoUaN8YyMiIuR0On19PXLkiLxer1/v%2B/Xrp7i4OB0%2BfFiSVFFRoaioKCUmJvrGpKeny2azqbKyUpJUWVmp%2BPh49ezZ0zcmIyNDDQ0Neu%2B99wJ38p1IZ%2Bt3ZWWl0tLSFBoa6jfm/fffV0NDQwA60Dn83//9n9LT0/Wf//mfWrx4sT799FPfvrfeeov%2Bm6ShoUE2m00333yzJL7/O9oX%2B/%2B5YP3%2BJ2AFyOnTp%2BX1euVwOPy2R0dHy%2B12W1RVcHA6nfr5z3%2BuJ598UkuWLNHf//53zZgxQ2fPnpXb7ZbNZrtsXz0ej7p06aKIiIhLjnG73X4/SJJkt9sVFRXlNyY6OtpvzOfz1tbWmnfCnVhn6/eN%2BDXJzMzUypUrtX37ds2fP19vvPGG7r33XhmGIelCT%2Bh/%2BxmGoeXLlys1NVX/Xzv3E6JEH8YB/Psyr5WkBxcVEoTMcg1Xs1iCTUQKuncKYm8e9rDQQtuhwCUHsUNdNjxGp3YX6bSXIgi6BKXSyaDCcmORRaK/GjaUMjzv4X1feefdzejdcVXe7wcEmXnA33x9lMdhxoMHDwJg/%2B%2BkrfIHRrv/f9%2B0hWjA4vF493kgEOheTHj//n0cOHBggCsj2nn/vMHj0KFDCAQCOH36NEqlkuHMCm2PqqqoVqvI5/ODXsr/0o/yH%2BX%2B5xmsPnE4HFAUZdPZqvmn3I0AAAOUSURBVI8fP276NUS92e127N%2B/H7VaDU6nEyLSM1en04lOp4NWq9Wz5tOnT4b9uq6j2Wwaav59J8rfr%2Btyucw7wCE2bHnzPQG8Xi8cDgdqtRoA5m%2BGTCaDR48eYWlpCW63u7ud/b8zfpT/Vkap/zlg9YnFYkEoFEKhUOhuExEUCgUcPXp0gCsbPV%2B/fkWtVoPb7YbX64XT6USxWOzub7VaKJfL3VwnJiagKIoh%2Bzdv3qBer3drotEovnz5ghcvXnRrCoUCRARHjhzp1rx69crwwXz8%2BDHsdjv8fn9fj3lYDFve0WgUT58%2Bha7rhhqfzwe73d6HBIbP27dv0Wg0ul/ozH97MpkMHj58iNu3b8Pj8Rj2sf/7r1f%2BWxml/ldUVVV/IQv6BXv37kUul8O%2BfftgsVhw48YNVCoVXL16FVarddDLG1rXrl3D7t27AQDVahWqquLz589QVRVWqxW6ruPmzZvw%2B/1ot9vIZrNot9tYWFiAoijYtWsX3r17h5WVFQSDQTQaDaTTaXg8HszOzgIAxsbGUC6Xce/ePRw%2BfBgbGxtIp9OIx%2BM4c%2BYMgD%2B/XB88eIAnT54gEAjg5cuXyGazOHfuHGKx2MDyMZumaVhbW8P79%2B9x584dRCIR7NmzB51OB3a7fajy9vl8yOfzeP36NXw%2BH4rFIhYXFzE3N4dQKDSwDLejV/6KomBxcRE2mw26ruP58%2BdIpVKw2Wy4dOkS898mVVVx9%2B5d5HI5uFwuaJoGTdOgKEr3Qmb2f//8LH9N00a7/39y1yRt0/Lyspw8eVLC4bCcPXtWnj17NuglDb0LFy5IPB6XcDgsiURC5ufnpVarGWpyuZzEYjGJRCKSTCZlfX3dsP/79%2B%2BSyWTk%2BPHjEo1G5fz58/LhwwdDTbPZlIsXL8qxY8dkcnJSUqmUaJpmqKnX6zIzMyPRaFSmpqbk%2BvXrout6fw58QEqlkoyPj0swGDQ8Ll%2B%2B3K0ZprwrlYpMT09LJBKRRCIht27dMjmRndUr/2/fvkkymZQTJ07IxMSEnDp1Sq5cubLpv/SY/3%2BzVe7BYFBWV1cNdez//vhZ/qPe/7%2BJ/HUpPhERERGZgtdgEREREZmMAxYRERGRyThgEREREZmMAxYRERGRyThgEREREZmMAxYRERGRyThgEREREZmMAxYRERGRyThgEREREZmMAxYRERGRyThgEREREZmMAxYRERGRyThgEREREZnsD1z8eeKDdX7wAAAAAElFTkSuQmCC"/>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12" id="common-7726252232539263095">
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">231423</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">238651</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">238225</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">211602</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">237430</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">230037</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">223896</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">202404</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">215708</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">234151</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (17671)</td>
+        <td class="number">17671</td>
+        <td class="number">99.9%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12"  id="extreme-7726252232539263095">
+            <p class="h4">Minimum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">16</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">28</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">41</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">80</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">591</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+            <p class="h4">Maximum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">241207</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">241213</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">241216</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">241218</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">241219</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+    </div>
+</div>
+</div><div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_Name">Name<br/>
+            <small>Categorical</small>
+        </p>
+    </div><div class="col-md-3">
+    <table class="stats ">
+        <tr class="alert">
+            <th>Distinct count</th>
+            <td>16747</td>
+        </tr>
+        <tr>
+            <th>Unique (%)</th>
+            <td>94.7%</td>
+        </tr>
+        <tr class="ignore">
+            <th>Missing (%)</th>
+            <td>0.0%</td>
+        </tr>
+        <tr class="ignore">
+            <th>Missing (n)</th>
+            <td>0</td>
+        </tr>
+    </table>
+</div>
+<div class="col-md-6 collapse in" id="minifreqtable-6891516495191726432">
+    <table class="mini freq">
+        <tr class="">
+    <th>J. Williams</th>
+    <td>
+        <div class="bar" style="width:1%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 0.0%">
+            &nbsp;
+        </div>
+        7
+    </td>
+</tr><tr class="">
+    <th>J. Valencia</th>
+    <td>
+        <div class="bar" style="width:1%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 0.0%">
+            &nbsp;
+        </div>
+        7
+    </td>
+</tr><tr class="">
+    <th>J. Rodríguez</th>
+    <td>
+        <div class="bar" style="width:1%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 0.0%">
+            &nbsp;
+        </div>
+        7
+    </td>
+</tr><tr class="other">
+    <th>Other values (16744)</th>
+    <td>
+        <div class="bar" style="width:100%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 99.9%">
+            17660
+        </div>
+        
+    </td>
+</tr>
+    </table>
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#freqtable-6891516495191726432, #minifreqtable-6891516495191726432"
+       aria-expanded="true" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="col-md-12 extrapadding collapse" id="freqtable-6891516495191726432">
+    
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">J. Williams</td>
+        <td class="number">7</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">J. Valencia</td>
+        <td class="number">7</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">J. Rodríguez</td>
+        <td class="number">7</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Paulinho</td>
+        <td class="number">6</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Wanderson</td>
+        <td class="number">6</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">J. Jones</td>
+        <td class="number">6</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Felipe</td>
+        <td class="number">6</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">J. Martínez</td>
+        <td class="number">5</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">L. Rodríguez</td>
+        <td class="number">5</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">L. Martínez</td>
+        <td class="number">5</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:1%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (16737)</td>
+        <td class="number">17621</td>
+        <td class="number">99.7%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+</div>
+</div><div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_Nationality">Nationality<br/>
+            <small>Categorical</small>
+        </p>
+    </div><div class="col-md-3">
+    <table class="stats ">
+        <tr class="alert">
+            <th>Distinct count</th>
+            <td>161</td>
+        </tr>
+        <tr>
+            <th>Unique (%)</th>
+            <td>0.9%</td>
+        </tr>
+        <tr class="ignore">
+            <th>Missing (%)</th>
+            <td>0.0%</td>
+        </tr>
+        <tr class="ignore">
+            <th>Missing (n)</th>
+            <td>0</td>
+        </tr>
+    </table>
+</div>
+<div class="col-md-6 collapse in" id="minifreqtable4366333419177226124">
+    <table class="mini freq">
+        <tr class="">
+    <th>United Kingdom</th>
+    <td>
+        <div class="bar" style="width:16%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 12.1%">
+            &nbsp;
+        </div>
+        2137
+    </td>
+</tr><tr class="">
+    <th>Germany</th>
+    <td>
+        <div class="bar" style="width:9%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 6.4%">
+            &nbsp;
+        </div>
+        1135
+    </td>
+</tr><tr class="">
+    <th>Spain</th>
+    <td>
+        <div class="bar" style="width:8%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 5.7%">
+            &nbsp;
+        </div>
+        1009
+    </td>
+</tr><tr class="other">
+    <th>Other values (158)</th>
+    <td>
+        <div class="bar" style="width:100%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 75.8%">
+            13400
+        </div>
+        
+    </td>
+</tr>
+    </table>
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#freqtable4366333419177226124, #minifreqtable4366333419177226124"
+       aria-expanded="true" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="col-md-12 extrapadding collapse" id="freqtable4366333419177226124">
+    
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">United Kingdom</td>
+        <td class="number">2137</td>
+        <td class="number">12.1%</td>
+        <td>
+            <div class="bar" style="width:26%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Germany</td>
+        <td class="number">1135</td>
+        <td class="number">6.4%</td>
+        <td>
+            <div class="bar" style="width:14%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Spain</td>
+        <td class="number">1009</td>
+        <td class="number">5.7%</td>
+        <td>
+            <div class="bar" style="width:12%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">France</td>
+        <td class="number">973</td>
+        <td class="number">5.5%</td>
+        <td>
+            <div class="bar" style="width:12%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Argentina</td>
+        <td class="number">961</td>
+        <td class="number">5.4%</td>
+        <td>
+            <div class="bar" style="width:12%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Brazil</td>
+        <td class="number">806</td>
+        <td class="number">4.6%</td>
+        <td>
+            <div class="bar" style="width:10%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Italy</td>
+        <td class="number">797</td>
+        <td class="number">4.5%</td>
+        <td>
+            <div class="bar" style="width:10%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Colombia</td>
+        <td class="number">591</td>
+        <td class="number">3.3%</td>
+        <td>
+            <div class="bar" style="width:7%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Japan</td>
+        <td class="number">469</td>
+        <td class="number">2.7%</td>
+        <td>
+            <div class="bar" style="width:6%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Netherlands</td>
+        <td class="number">429</td>
+        <td class="number">2.4%</td>
+        <td>
+            <div class="bar" style="width:6%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (151)</td>
+        <td class="number">8374</td>
+        <td class="number">47.4%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+</div>
+</div><div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_Overall">Overall<br/>
+            <small>Numeric</small>
+        </p>
+    </div><div class="col-md-6">
+    <div class="row">
+        <div class="col-sm-6">
+            <table class="stats ">
+                <tr>
+                    <th>Distinct count</th>
+                    <td>49</td>
+                </tr>
+                <tr>
+                    <th>Unique (%)</th>
+                    <td>0.3%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (n)</th>
+                    <td>0</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (n)</th>
+                    <td>0</td>
+                </tr>
+            </table>
+
+        </div>
+        <div class="col-sm-6">
+            <table class="stats ">
+
+                <tr>
+                    <th>Mean</th>
+                    <td>66.198</td>
+                </tr>
+                <tr>
+                    <th>Minimum</th>
+                    <td>46</td>
+                </tr>
+                <tr>
+                    <th>Maximum</th>
+                    <td>94</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Zeros (%)</th>
+                    <td>0.0%</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="col-md-3 collapse in" id="minihistogram160827954858171259">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABLCAYAAAA1fMjoAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAABKtJREFUeJzt3M1LY1cYBvAnc9Xp1NLJIElqlDKUQoMgFvyqGylRkmzclYZslIJLNyKIilxo9T8wuy5ciaTgOkSN1LozWdTUotRShHxoE2JDocRhEk4X06ZDGU%2BSGe9X5vktbw65L8l5vHnjm2sTQgjoLJ/PIxKJIBgMwul06n36NyaEQLVabXi9oiiw2WwaVtTajNwvNiMCYnWVSgXqdz/isliuu/Zp1yN88%2BWnaGtr06Eyum98117TZbGMX67/MroM0tgDowsgMjNeQTSmPLCxX7EwBkRjPU/ewdc7P7FfsSi%2BEzpgv2Jd7EGIJHgFMRH2K%2BbDgJgI%2BxXz4atrMuxXzIU9CJEEA0IkwYAQSTAgRBIMCJEEA0IkwYAQSTAgRBIMCJEEA0IkwYAQSTAgRBIcVkTzt/FpZi1ZGwOCFxu%2B0dv4AMBnH9k1rojMggH5RzNj5h92PdK4GjIL9iBEEgwIkQQDQiTBgBBJMCBEEgwIkQS/5rUo3kNLHwyIRfEeWvrgK2ZhvIeW9tiDEEm07BWkmQFEDh/SXVo2IM0MIHL4kO7SsgEBGv%2BMzuFDugt7ECIJBoRIggEhkmBAiCRaukmnF5odSwE4mvIvBuQt0MxYCsDRlJfxFXhLcCzl9VgqINVqFT/8nMOzqqi79r0Otlf05iwVECEEvj28bOgv4ScfdOpQUWviKP1/LBUQAPhiyI1S%2BXnddU/ebUfitz8aek7344dNfZ3XzHqrrQWA4aePsfn9r/j9z2d117ref4ivPv8YiqI09NxW62tsQoj6n1fuWT6fRyQSQTAYhNPp1Pv0ZDFG7hdDPqgXCgWEw2EUCgUjTk8WY%2BR%2BYSdLJMGAEEkwIEQSDAiRhCEBcTgcmJubg8PhMOL0ZDFG7hdDvuYlsgp%2BxCKSYECIJBgQIgkGhEiCASGSYECIJBgQIgndArKzswOPx4N4PA4AuLm5wezsLPx%2BP6amppBMJvUqhUxkfX0dXq8XHo8H5%2BfnteOy/XF7e4uFhQX4fD4EAgHEYjHtChQ6yGQyIhgMimAwKPb394UQQiwvL4uNjQ0hhBCpVEqMj4%2BLSqWiRzlkIolEQlxfXwuv1yvOzs5qx2X7IxwOi6WlJSGEEOl0WoyNjYlSqaRJfZpfQYQQWF1dhaqqaG9vrx2PRqMIhUIAgP7%2BfrhcLhwfH2tdDpnM0NAQXC4XxP8GOmT74%2BXHent7MTo6ir29PU3q0zwgm5ubGBwcRF9fX%2B1YqVRCtVpFV1dX7Zjb7cbV1ZXW5ZAF1NsfuVwObrf7lY/dN01/IHxxcYHd3V1sbW1peRoizWh6BUkmk8hms/D5fPB6vTg5OYGqqohGo1AUBcVisbY2m82iu7tby3LIIux2u3R/9PT0IJfLvfKx%2B6ZpQEKhEI6OjhCPx3FwcICBgQGsra0hFAohEAhge3sbAJBKpZDP5zEyMqJlOWQhsv3h9/trj6XTaSQSCUxOTmpSh67j7tPT05iZmcHExASKxSIWFxeRyWTQ0dEBVVUxPDysVylkEqqq4vDwEMViEXa7HZ2dnYjFYtL9US6XsbKygtPTUyiKgvn5efj9fk3q4%2B9BiCT4n3QiCQaESOJveUCwG7PT1XAAAAAASUVORK5CYII%3D">
+
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#descriptives160827954858171259,#minihistogram160827954858171259"
+       aria-expanded="false" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="row collapse col-md-12" id="descriptives160827954858171259">
+    <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation" class="active"><a href="#quantiles160827954858171259"
+                                                  aria-controls="quantiles160827954858171259" role="tab"
+                                                  data-toggle="tab">Statistics</a></li>
+        <li role="presentation"><a href="#histogram160827954858171259" aria-controls="histogram160827954858171259"
+                                   role="tab" data-toggle="tab">Histogram</a></li>
+        <li role="presentation"><a href="#common160827954858171259" aria-controls="common160827954858171259"
+                                   role="tab" data-toggle="tab">Common Values</a></li>
+        <li role="presentation"><a href="#extreme160827954858171259" aria-controls="extreme160827954858171259"
+                                   role="tab" data-toggle="tab">Extreme Values</a></li>
+
+    </ul>
+
+    <div class="tab-content">
+        <div role="tabpanel" class="tab-pane active row" id="quantiles160827954858171259">
+            <div class="col-md-4 col-md-offset-1">
+                <p class="h4">Quantile statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Minimum</th>
+                        <td>46</td>
+                    </tr>
+                    <tr>
+                        <th>5-th percentile</th>
+                        <td>54</td>
+                    </tr>
+                    <tr>
+                        <th>Q1</th>
+                        <td>62</td>
+                    </tr>
+                    <tr>
+                        <th>Median</th>
+                        <td>66</td>
+                    </tr>
+                    <tr>
+                        <th>Q3</th>
+                        <td>71</td>
+                    </tr>
+                    <tr>
+                        <th>95-th percentile</th>
+                        <td>77</td>
+                    </tr>
+                    <tr>
+                        <th>Maximum</th>
+                        <td>94</td>
+                    </tr>
+                    <tr>
+                        <th>Range</th>
+                        <td>48</td>
+                    </tr>
+                    <tr>
+                        <th>Interquartile range</th>
+                        <td>9</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-4 col-md-offset-2">
+                <p class="h4">Descriptive statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Standard deviation</th>
+                        <td>6.9826</td>
+                    </tr>
+                    <tr>
+                        <th>Coef of variation</th>
+                        <td>0.10548</td>
+                    </tr>
+                    <tr>
+                        <th>Kurtosis</th>
+                        <td>0.0064208</td>
+                    </tr>
+                    <tr>
+                        <th>Mean</th>
+                        <td>66.198</td>
+                    </tr>
+                    <tr>
+                        <th>MAD</th>
+                        <td>5.5283</td>
+                    </tr>
+                    <tr class="">
+                        <th>Skewness</th>
+                        <td>0.012039</td>
+                    </tr>
+                    <tr>
+                        <th>Sum</th>
+                        <td>1170450</td>
+                    </tr>
+                    <tr>
+                        <th>Variance</th>
+                        <td>48.756</td>
+                    </tr>
+                    <tr>
+                        <th>Memory size</th>
+                        <td>276.3 KiB</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-8 col-md-offset-2" id="histogram160827954858171259">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQCAYAAAByNR6YAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAAIABJREFUeJzs3X9clfX9//Hn4QDJ%2BJVy4FM0zaCMUEHAH8jATUxd2qePbe7DVmvNb7O2JrhGzSmoiAKVafmRT920muZixRpuzmW1aptlUcslqOuHm8xwM4NzVH6IBhyu7x9%2BOuuEGnKu4zkHH/fbjRt6XW%2Bu63W94PJ6%2Bj7XubAYhmEIAAAApgnydQEAAAADDQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADBZwAWs9evXKykpSRUVFa5lCxcuVFJSktvH3Llz3b6us7NTy5Yt04QJE5SWlqaCggI5HA63MS0tLSosLFRGRobGjRunoqIidXR0eFxzU1OT1q5dq6amJo%2B3dSGif56hf56hf56hf56hf57xZf8CKmDt3r1b1dXVSkpK6rVu0qRJev311/Xaa6/ptdde0%2BrVq93Wl5WVafv27Vq7dq2qqqrU1NSk/Px8tzGFhYVqaGjQxo0btW7dOu3cuVNLlizxuO7m5mZVVlaqubnZ421diOifZ%2BifZ%2BifZ%2BifZ%2BifZ3zZv4AJWMePH9c999yjFStWKDIystf60NBQDRkyRDExMYqJiXEb097erpqaGi1cuFDjx49XcnKyysvL9fbbb2v37t2SpP3792vHjh0qKyvT6NGjlZ6eruLiYm3bto0fbAAAcE4CJmCVlpYqNzdXEydOPO36P//5z8rKytJXv/pVlZSU6NixY651e/fuldPpdPvahIQExcfHa9euXZKkuro6RUdHKzk52TUmKytLFotF9fX1XjoqAAAwEAX7uoC%2BePbZZ/Xuu%2B%2BqpqbmtOtzcnI0bdo0ffGLX1RjY6NWr16t22%2B/XdXV1bJYLLLb7QoJCVFERITb18XExMhut0uS7Ha7hgwZ4rbearUqOjraNQYAAKAv/D5gHT58WOXl5dqwYYNCQkJOO2bGjBmuP1911VUaMWKEpk6dqjfffFOZmZnnq1RJp26o%2B%2BxLivv37z%2BvNQAAgH873XU4NjZWcXFxXtun3wesvXv36siRI/ra174mwzAkSU6nUzt37lRVVZX27Nkji8Xi9jVDhw7V4MGD1djYqMzMTNlsNnV1dam9vd1tFsvhcMhms0mSbDabjhw54rYdp9OplpYW15i%2BqK6uVmVlZa/lP/zhDzVy5Mg%2Bbwf/NnLkSL3//vu%2BLiNg0T/P0D/P0D/P0D/PjBw5UuPGjdM999zTa928efN6vdnNTH4fsLKysrR161a3ZT/96U%2BVmJio22%2B/vVe4kk7Neh07dkyxsbGSpFGjRslqtaq2tlZTp06VJDU0NOjQoUNKS0uTJI0ZM0atra165513XPdh1dbWyjAMpaam9rnevLw85ebm9loeGxur1tYTcjp7%2BrwtnGK1BikqKoz%2B9RP98wz98wz98wz984zVGqTVq1ef9s1qn2QEb/H7gPWFL3xBV155pduysLAwXXzxxUpMTFRHR4cqKys1ffp02Ww2NTY2auXKlRo%2BfLiys7MlSREREZo9e7YqKioUFRWl8PBwrVixQunp6UpJSZEkJSYmKjs7W8XFxSopKVFXV5eWL1%2BumTNnntM3IS4u7oxTjkePHld3NydIfzmdPfTPA/TPM/TPM/TPM/Sv/852XfYmvw9Yp/PpWSur1ar3339fW7ZsUWtrq%2BLi4pSdna358%2Be73bO1aNEiWa1WFRQUqLOzUzk5OVq6dKnbdletWqXS0lLNmTNHQUFBmj59uoqKis7bcQEAgIHBYnxyYxO8jhms/gkODtLgweH0r5/c%2B%2Bf0dTl90Ptlf1/i588z9M8z9M8zn/TPJ/v2yV4B%2BMyDL%2B7TAccJX5fRy/CYMN01dYSvywAAUxCwgAvMAccJ7Tt83NdlAMCAFjBPcgcAAAgUBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAEwWcAFr/fr1SkpKUkVFhdvyNWvWKDs7W6mpqZozZ44%2B%2BOADt/WdnZ1atmyZJkyYoLS0NBUUFMjhcLiNaWlpUWFhoTIyMjRu3DgVFRWpo6PD68cEAAAGloAKWLt371Z1dbWSkpLclq9fv15VVVVavny5nnnmGYWFhem2225TZ2ena0xZWZm2b9%2ButWvXqqqqSk1NTcrPz3fbTmFhoRoaGrRx40atW7dOO3fu1JIlS87LsQEXOmuQRZLhhx89MgzDm4cOYAAK9nUBfXX8%2BHHdc889WrFihR5%2B%2BGG3dZs2bdKdd96pyZMnS5Luv/9%2BZWVl6aWXXtKMGTPU3t6umpoaPfjggxo/frwkqby8XDNmzNDu3buVkpKi/fv3a8eOHdq8ebOSk5MlScXFxbrjjju0YMECxcbGnt8DBi4wlw0epAdf/JsOOE74uhQ3w2PCVPrfY3xdBoAAEzABq7S0VLm5uZo4caJbwDp48KDsdrsyMzNdyyIiIpSamqq6ujrNmDFDe/bskdPp1MSJE11jEhISFB8fr127diklJUV1dXWKjo52hStJysrKksViUX19va699trzc6DABeyA44T2HT7u6zIAwGMBEbCeffZZvfvuu6qpqem1zm63y2KxyGazuS2PiYmR3W6XJDkcDoWEhCgiIuKMY%2Bx2u4YMGeK23mq1Kjo62jUGAACgL/w%2BYB0%2BfFjl5eXasGGDQkJCfF3O52pqalJzc3Ov5bGxsRo0KNIHFQU%2BqzXI7TPOjXv/enxbTADj569/OH89Q/88Y7UGnfW6HBcX57V9%2B33A2rt3r44cOaKvfe1rrhtNnU6ndu7cqaqqKj333HMyDEN2u91tFsvhcOiaa66RJNlsNnV1dam9vd1tFsvhcLi%2Bxmaz6ciRI277djqdamlp6TU7djbV1dWqrKzstXzevHm9bqrHuYmKCvN1CQEtKipM3d3dvi4jYPHz5xn65xn6139PPPGYT67Lfh%2BwsrKytHXrVrdlP/3pT5WYmKjbb79dQ4cOlc1m0xtvvOF6d2F7e7vq6%2Bt10003SZJGjRolq9Wq2tpaTZ06VZLU0NCgQ4cOKS0tTZI0ZswYtba26p133nHdh1VbWyvDMJSamtrnevPy8pSbm9treWxsrFpbT8jpZAbhXFmtQYqKCqN//eTePwJWf/Hz1z%2Bcv56hf56xWoPOel32Jr8PWF/4whd05ZVXui0LCwvTxRdfrMTEREnSrbfeqkceeUTDhg3TZZddpjVr1uiSSy7RlClTJJ266X327NmqqKhQVFSUwsPDtWLFCqWnpyslJUWSlJiYqOzsbBUXF6ukpERdXV1avny5Zs6ceU7fhLi4uDNOOR49elzd3Zwg/eV09tA/D5zqH48b6C9%2B/jxD/zxD//rvbNdlb/L7gHU6FovF7e9z587VyZMntWTJErW1tWns2LF69NFHFRoa6hqzaNEiWa1WFRQUqLOzUzk5OVq6dKnbdlatWqXS0lLNmTNHQUFBmj59uoqKis7LMQEAgIHDYvAEvfOGGaz%2BCQ4O0uDB4fSvn9z759T8p%2Bv98lEI1460qdEPH9Mw4pJwbfrBRLW1fczPXz9w/nqG/nnmk/75Am9LAAAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTBfu6AADwZ9Ygi5xOp6QeSYavyzkNi68LAHAaBCwAOIvLBg/Sspo9OuA44etS3AyPCdNdU0f4ugwAZ0DAAoDPccBxQvsOH/d1GQACCPdgAQAAmIyABQAAYDK/D1hPPfWUbrjhBmVkZCgjI0Pf/OY39corr7jWL1y4UElJSW4fc%2BfOddtGZ2enli1bpgkTJigtLU0FBQVyOBxuY1paWlRYWKiMjAyNGzdORUVF6ujoOC/HCAAABha/vwfr0ksv1d13363hw4fLMAxt3rxZd955p7Zs2aLExERJ0qRJk3TvvffKME69wyc0NNRtG2VlZXr11Ve1du1aRUREqLS0VPn5%2BfrFL37hGlNYWCiHw6GNGzeqq6tLCxcu1JIlS/TAAw%2Bcv4MFAAADgt/PYH3lK1/RpEmTNGzYMF1%2B%2BeW66667FB4errq6OteY0NBQDRkyRDExMYqJiVFkZKRrXXt7u2pqarRw4UKNHz9eycnJKi8v19tvv63du3dLkvbv368dO3aorKxMo0ePVnp6uoqLi7Vt2zY1Nzef92MGAACBze8D1qf19PTo2Wef1YkTJ5SWluZa/uc//1lZWVn66le/qpKSEh07dsy1bu/evXI6nZo4caJrWUJCguLj47Vr1y5JUl1dnaKjo5WcnOwak5WVJYvFovr6%2BvNwZAAAYCDx%2B5cIJWnfvn3Ky8tTZ2enwsPDVVlZqYSEBElSTk6Opk2bpi9%2B8YtqbGzU6tWrdfvtt6u6uloWi0V2u10hISGKiIhw22ZMTIzsdrskyW63a8iQIW7rrVaroqOjXWMAAAD6KiACVkJCgn7729%2Bqra1NL7zwghYsWKAnn3xSiYmJmjFjhmvcVVddpREjRmjq1Kl68803lZmZed5rbWpqOu3LirGxsRo0KPI0X4HPY7UGuX3GuXHvX49vi4GpgoMt8vcXIjh/PUP/PGO1Bp31uhwXF%2Be1fQdEwAoODtbQoUMlScnJydq9e7c2bdqkZcuW9Ro7dOhQDR48WI2NjcrMzJTNZlNXV5fa29vdZrEcDodsNpskyWaz6ciRI27bcTqdamlpcY3pq%2BrqalVWVvZaPm/ePOXn55/TtuAuKirM1yUEtKioMHV3d/u6DJgoMjJMwcEB8c8456%2BH6F//PfHEYz65LgfGmfkZPT096uzsPO26w4cP69ixY4qNjZUkjRo1SlarVbW1tZo6daokqaGhQYcOHXLdxzVmzBi1trbqnXfecd2HVVtbK8MwlJqaek615eXlKTc3t9fy2NhYtbaekNPJDMK5slqDFBUVRv/6yb1/BKyBpK3thAJhBovzt//on2es1qCzXpe9ye8D1urVqzVp0iRdeumlOn78uLZu3aq33npLjz/%2BuDo6OlRZWanp06fLZrOpsbFRK1eu1PDhw5WdnS1JioiI0OzZs1VRUaGoqCiFh4drxYoVSk9PV0pKiiQpMTFR2dnZKi4uVklJibq6urR8%2BXLNnDnznL8BcXFxZ5xyPHr0uLq7OUH6y%2BnsoX8eONU/f/xlxeivU9/PwDgnOH89Q//672zXZW/y%2B4DlcDi0YMECNTc3KzIyUldffbUef/xxTZw4UR9//LHef/99bdmyRa2trYqLi1N2drbmz5%2BvkJAQ1zYWLVokq9WqgoICdXZ2KicnR0uXLnXbz6pVq1RaWqo5c%2BYoKChI06dPV1FR0fk%2BXAAAMABYjE%2BezgmvYwarf4KDgzR4cDj96yf3/jk1/%2Bl6v/zFxdeOtKnRD3%2Bpsr/WNeKScK35Zqoki69LOSvOX8/QP8980j9f8O8X7wEAAAIQAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADCZ3wesp556SjfccIMyMjKUkZGhb37zm3rllVfcxqxZs0bZ2dlKTU3VnDlz9MEHH7it7%2Bzs1LJlyzRhwgSlpaWpoKBADofDbUxLS4sKCwuVkZGhcePGqaioSB0dHV4/PgAAMPD4fcC69NJLdffdd%2BvXv/61Nm/erAkTJujOO%2B/U/v37JUnr169XVVWVli9frmeeeUZhYWG67bbb1NnZ6dpGWVmZtm/frrVr16qqqkpNTU3Kz893209hYaEaGhq0ceNGrVu3Tjt37tSSJUvO67ECAICBwe8D1le%2B8hVNmjRJw4YN0%2BWXX6677rpL4eHhqqurkyRt2rRJd955pyZPnqwRI0bo/vvvV1NTk1566SVJUnt7u2pqarRw4UKNHz9eycnJKi8v19tvv63du3dLkvbv368dO3aorKxMo0ePVnp6uoqLi7Vt2zY1Nzf77NgBAEBg8vuA9Wk9PT169tlndeLECaWlpengwYOy2%2B3KzMx0jYmIiFBqaqorgO3Zs0dOp1MTJ050jUlISFB8fLx27dolSaqrq1N0dLSSk5NdY7KysmSxWFRfX3%2Bejg4AAAwUwb4uoC/27dunvLw8dXZ2Kjw8XJWVlUpISNCuXbtksVhks9ncxsfExMhut0uSHA6HQkJCFBERccYxdrtdQ4YMcVtvtVoVHR3tGgMAANBXARGwEhIS9Nvf/lZtbW164YUXtGDBAj355JO%2BLuu0mpqaTvuyYmxsrAYNivRBRYHPag1y%2B4xz496/Ht8WA1MFB1vk7y9EcP56hv55xmoNOut1OS4uzmv7DoiAFRwcrKFDh0qSkpOTtXv3bm3atEnf%2B973ZBiG7Ha72yyWw%2BHQNddcI0my2Wzq6upSe3u72yyWw%2BFwfY3NZtORI0fc9ul0OtXS0tJrduzzVFdXq7KystfyefPm9bqxHucmKirM1yUEtKioMHV3d/u6DJgoMjJMwcEB8c8456%2BH6F//PfHEYz65LgfGmfkZPT096uzs1NChQ2Wz2fTGG28oKSlJ0qmb2uvr63XTTTdJkkaNGiWr1ara2lpNnTpVktTQ0KBDhw4pLS1NkjRmzBi1trbqnXfecd2HVVtbK8MwlJqaek615eXlKTc3t9fy2NhYtbaekNPJDMK5slqDFBUVRv/6yb1/BKyBpK3thAJhBovzt//on2es1qCzXpe9ye8D1urVqzVp0iRdeumlOn78uLZu3aq33npLjz/%2BuCTp1ltv1SOPPKJhw4bpsssu05o1a3TJJZdoypQpkk7d9D579mxVVFQoKipK4eHhWrFihdLT05WSkiJJSkxMVHZ2toqLi1VSUqKuri4tX75cM2fOPOdvQFxc3BmnHI8ePa7ubk6Q/nI6e%2BifB071z/B1GTDRqe9nYJwTnL%2BeoX/9d7brsjf5fcByOBxasGCBmpubFRkZqauvvlqPP/64612Bc%2BfO1cmTJ7VkyRK1tbVp7NixevTRRxUaGuraxqJFi2S1WlVQUKDOzk7l5ORo6dKlbvtZtWqVSktLNWfOHAUFBWn69OkqKio6r8cKAAAGBothGPyX9jxhBqt/goODNHhwOP3rJ/f%2BOTX/6XrtO3zc12X1cu1ImxodJ/yuNn%2Bta8Ql4VrzzVRJFl%2BXclacv56hf575pH%2B%2B4N8v3gMAAAQgAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMm8ErDa29u9sVkAAICA4JWAlZ2drZ/%2B9Kd66623vLF5AAAAv%2BaVgFVYWKj3339ft9xyi6ZNm6Z169bpo48%2B8sauAAAA/I5XAtYtt9yiX//619q8ebMmTZqkDRs2KDc3V7fffrtefPFFdXd3e2O3AAAAfsGrN7knJyeruLhYr776qh544AG1traqoKBAkyZN0n333aeDBw96c/cAAAA%2B4fV3ERqGodraWj3//PP661//qiFDhmjy5Ml6/vnndd111%2BlXv/qVt0sAAAA4r4K9teGDBw%2BqpqZGv/nNb9TU1KSsrCytWrVKubm5Cg4OVk9Pj1auXKkHH3xQs2fP9lYZAAAA551XAtYtt9yiv/zlL4qNjdXXv/51zZ49W/Hx8W5jgoKCdN1112nDhg3eKAEAAMBnvBKwIiMj9fDDD2vSpEkKCjrzq5BJSUn6/e9/740SAAAAfMYrAevhhx/u07jQ0FANGzbMGyUAAAD4jFducn/uuef0s5/97LTrNmzYoBdeeMEbuwUAAPALXglY69atk9VqPe26kJAQrVu3zhu7BQAA8AteCVgffPCBRowYcdp1V155pf7xj394Y7cAAAB%2BwSsBKyQkREeOHDntOrvdfsbZLQAAgIHAKwFr7NixevTRR3Xy5Em35SdPntTjjz%2BucePG9Xlb69at0%2BzZs5Wenq6srCz98Ic/7DUDtnDhQiUlJbl9zJ07121MZ2enli1bpgkTJigtLU0FBQVyOBxuY1paWlRYWKiMjAyNGzdORUVF6ujoOMejBwAAFzqvvIvwxz/%2BsfLy8nTttdfquuuuU1xcnJqamvT888/rxIkTWrlyZZ%2B3tXPnTn3729/W6NGj1d3drdWrV%2Bu2227Ttm3bNGjQINe4SZMm6d5775VhGJJOvUPx08rKyvTqq69q7dq1ioiIUGlpqfLz8/WLX/zCNaawsFAOh0MbN25UV1eXFi5cqCVLluiBBx7wsCMAAOBC4pWAdeWVV%2BpXv/qV1qxZo61bt6qlpUXR0dHKysrSvHnzlJCQ0OdtPfroo25/r6ioUFZWlvbu3auxY8e6loeGhmrIkCGn3UZ7e7tqamr04IMPavz48ZKk8vJyzZgxQ7t371ZKSor279%2BvHTt2aPPmzUpOTpYkFRcX64477tCCBQsUGxt7rm0AAAAXKK/9qpwrrrhCDz30kOnbbWtrk8Vi0cUXX%2By2/M9//rOysrIUFRWlzMxM/ehHP3KN2bt3r5xOpyZOnOgan5CQoPj4eO3atUspKSmqq6tTdHS0K1xJUlZWliwWi%2Brr63XttdeafiwAAGBg8lrA8gbDMFReXq6MjAxdeeWVruU5OTmaNm2avvjFL6qxsVGrV6/W7bffrurqalksFtntdoWEhCgiIsJtezExMbLb7ZJO3Xz/2Rkwq9Wq6Oho1xgAAIC%2B8ErAMgxDNTU1euGFF3T48GF1dnb2GtOfh42WlJTo73//u5566im35TNmzHD9%2BaqrrtKIESM0depUvfnmm8rMzDz3A/BAU1OTmpubey2PjY3VoEGR57WWgcJqDXL7jHPj3r8e3xYDUwUHW%2BSl9yqZhvPXM/TPM1Zr0Fmvy3FxcV7bt1cC1qpVq/TYY48pPT1daWlpCgkJ8XibpaWleuWVV1RVVfW5DRk6dKgGDx6sxsZGZWZmymazqaurS%2B3t7W6zWA6HQzabTZJks9l6PVrC6XSqpaXFNaYvqqurVVlZ2Wv5vHnzlJ%2Bf3%2BftoLeoqDBflxDQoqLC1N3d7esyYKLIyDAFBwfGCxGcv56hf/33xBOP%2BeS67JUz8ze/%2BY3mzZunefPmmbK90tJSvfzyy3ryyScVHx//ueMPHz6sY8eOuW5MHzVqlKxWq2prazV16lRJUkNDgw4dOqS0tDRJ0pgxY9Ta2qp33nnHdR9WbW2tDMNQampqn2vNy8tTbm5ur%2BWxsbFqbT0hp5MZhHNltQYpKiqM/vWTe/8IWANJW9sJBcIMFudv/9E/z1itQWe9LnuTVwLWxx9/rIyMDFO2VVJSomeffVaPPPKIwsLCXPdDRUZG6qKLLlJHR4cqKys1ffp02Ww2NTY2auXKlRo%2BfLiys7MlSREREZo9e7YqKioUFRWl8PBwrVixQunp6UpJSZEkJSYmKjs7W8XFxSopKVFXV5eWL1%2BumTNnntM3IS4u7owzbEePHld3NydIfzmdPfTPA6f6Z/i6DJjo1PczMM4Jzl/P0L/%2BO9t12Zu8ErCuv/56bd%2B%2B3e1de/319NNPy2Kx6JZbbnFbXlFRoVmzZslqter999/Xli1b1Nraqri4OGVnZ2v%2B/PluL00uWrRIVqtVBQUF6uzsVE5OjpYuXeq2zVWrVqm0tFRz5sxRUFCQpk%2BfrqKiIo%2BPAQAAXFi8ErDGjh2r1atXy%2BFw6Etf%2BpIiI3vf3D1lypQ%2Bbeu999476/qLLrpIjz/%2B%2BOduJzQ0VIsXL9bixYvPOCYqKoqHigIAAI95JWAVFhZKkv71r39p69atvdZbLBa9%2B%2B673tg1AACAz3klYP3%2B97/3xmYBAAACglcC1rBhw7yxWQAAgIDg1QeovP7669qzZ48%2B/PBD3XHHHbr00kv1l7/8RUOHDvXJHf0AAADng1cC1pEjR5Sfn6%2B3335bsbGxam5u1je%2B8Q1deumlqq6uVkREhJYsWeKNXQMAAPicV55QV15erqamJm3ZskV/%2BMMfZBj/fvZOVlaWamtrvbFbAAAAv%2BCVgLV9%2B3bdddddGjFihCwWi9u6%2BPh4HT582Bu7BQAA8AteeYmwu7tb4eHhp13X2toaML87C%2Bg/f3pies///Q7CHvlXXQAwcHkl6YwePVqbN2/Wl7/85V7rnnvuOaWnp3tjt4BfefDFfTrgOOHrMtxkJlzs6xIA4ILglYA1f/58ffe739V3vvMdTZ8%2BXRaLRX/84x/1%2BOOP66WXXlJVVZU3dgv4lQOOE9p3%2BLivy3AzLCbM1yUAwAXBK/dgZWRkaMOGDers7NSKFStkGIb%2B93//V//85z/1s5/9TKNHj/bGbgEAAPyC126GGjt2rJ5%2B%2Bml1dHTo2LFjioqKUkREhLd2BwAA4De8frf5F77wBX3hC1/w9m4AAAD8hlcC1uLFiz93zPLly72xawAAAJ/zSsCqq6vrtaylpUXNzc26%2BOKLZbPZvLFbAAAAv%2BCVgLV169bTLt%2B3b5/uueceFRcXe2O3AAAAfsEr7yI8kxEjRuiC1J7qAAAgAElEQVR73/ueysrKzuduAQAAzqvzGrAkKSoqSh988MH53i0AAMB545WXCNvb23st6%2BzsVENDg9asWaMrr7zSG7sFAADwC14JWGPHju31S54lyTAMxcXF6eGHH/bGbgEAAPyCVwLW6R7BcNFFF%2BmSSy5RWlqaQkJCvLFbAAAAv%2BCVgPWNb3zDG5sFAAAICOf9JncAAICBziszWCNHjjztPVhnsnfvXm%2BUAQAA4BNeCVjz589XVVWVrFarcnNzZbPZZLfb9fLLL8swDN18882yWq3e2DUAAIDPeSVgtbW1KSkpSQ8//LBbkFq4cKF%2B8IMf6NixY7rnnnv6tK1169bpxRdfVENDgwYNGqS0tDTdfffduuKKK9zGrVmzRs8884za2tqUnp6ukpISXX755a71nZ2dqqio0LZt29TZ2amcnBwtXbpUMTExrjEtLS0qLS3Vn/70JwUFBWnatGkqKiril1UDAIBz4pV7sDZv3nzaWSqr1aqbb75Zmzdv7vO2du7cqW9/%2B9t65plntGHDBnV3d%2Bu2227TyZMnXWPWr1%2BvqqoqLV%2B%2BXM8884zCwsJ02223qbOz0zWmrKxM27dv19q1a1VVVaWmpibl5%2Be77auwsFANDQ3auHGj1q1bp507d2rJkiX97AIAALhQeSVgdXR06MMPPzztug8//FAff/xxn7f16KOPatasWUpMTNTVV1%2BtiooKHTp0yO2%2BrU2bNunOO%2B/U5MmTNWLECN1///1qamrSSy%2B9JOnUg09ramq0cOFCjR8/XsnJySovL9fbb7%2Bt3bt3S5L279%2BvHTt2qKysTKNHj1Z6erqKi4u1bds2NTc3e9ANAABwofFKwJoyZYoeeOAB/fa3v1VHR4ekU6Fry5YtWrVqlXJzc/u97ba2NlksFl188cWSpIMHD8putyszM9M1JiIiQqmpqaqrq5Mk7dmzR06nUxMnTnSNSUhIUHx8vHbt2iVJqqurU3R0tJKTk11jsrKyZLFYVF9f3%2B96AQDAhccr92AtXbpUCxYs0E9%2B8hNZLBZddNFF%2Bvjjj2UYhiZPnqylS5f2a7uGYai8vFwZGRmuX7djt9tlsVhks9ncxsbExMhut0uSHA6HQkJCFBERccYxdrtdQ4YMcVtvtVoVHR3tGgMAANAXXglYkZGRevjhh/X%2B%2B%2B9r9%2B7dstvtio2N1ejRo3X11Vf3e7slJSX6%2B9//rqeeesrEas3V1NR02pcUY2NjNWhQpA8qCnxWa5Db58DQ4%2BsCcAEIDrbI3x9nGJjnr/%2Bgf56xWoPOel2Oi4vz2r69ErA%2BcfXVV3sUqD6ttLRUr7zyiqqqqtwaYrPZZBiG7Ha72yyWw%2BHQNddc4xrT1dWl9vZ2t1ksh8Ph%2BhqbzaYjR4647dPpdKqlpaXX7NjZVFdXq7KystfyefPm9bqpHucmKirM1yX0WXd3t69LwAUgMjJMwcFe/WfcNIF0/voj%2Btd/TzzxmE%2Buy147M7u7u/XrX/9ae/bs0Ycffqji4mJdfvnlev755zVixAglJCT0eVulpaV6%2BeWX9eSTTyo%2BPt5t3dChQ2Wz2fTGG28oKSlJ0qmb2uvr63XTTTdJkkaNGiWr1ara2lpNnTpVktTQ0KBDhw4pLS1NkjRmzBi1trbqnXfecd2HVVtbK8MwlJqa2uda8/LyTnuPWWxsrFpbT8jpZGbjXFmtQYqKCguw/gVKnQhkbW0nFAgzWIF3/voP%2BucZqzXorNdlb/JKwDp48KD%2B3//7f7Lb7br66qtVX1%2Bv9vZ2SadCy/bt21VRUdGnbZWUlOjZZ5/VI488orCwMNf9UJGRkbroooskSbfeeqseeeQRDRs2TJdddpnWrFmjSy65RFOmTJF06qb32bNnq6KiQlFRUQoPD9eKFSuUnp6ulJQUSVJiYqKys7NVXFyskpISdXV1afny5Zo5c%2BY5fRPi4uLOOOV49OhxdXdzgvSX09kTQP0zfF0ALgDd3YYCJcwH1vnrf%2Bhf/53tuuxNXglYZWVlioqK0tNPP63o6GiNGjXKtW7ChAl68MEH%2B7ytp59%2BWhaLRbfccovb8oqKCs2aNUuSNHfuXJ08eVJLlixRW1ubxo4dq0cffVShoaGu8YsWLZLValVBQYHbg0Y/bdWqVSotLdWcOXMUFBSk6dOnq6ioqD8tAAAAFzCvBKw333xTDzzwgGJiYuR0Ot3WxcbGqqmpqc/beu%2B99/o0Lj8//6yvpYaGhmrx4sVavHjxGcdERUXpgQce6HNtAAAAp%2BOVF%2B%2BDgoJkGKd/icRut/OrZwAAwIDmlYA1btw4bdq0ye2dVBaLRZL0q1/9yu2hoAAAAAONV14iLCws1Le%2B9S3NnDlT1157rSwWi55%2B%2Bmnt27dPDQ0N%2BuUvf%2BmN3QIAAPgFr8xgXXXVVaqpqdGoUaNcv9j5hRde0KWXXqpf/vKXGj58uDd2CwAA4BdMn8EyDEPHjx9XfHy8Vq1aZfbmAQAA/J7pM1hdXV0aP368duzYYfamAQAAAoLpASs0NFT/8R//ccZ3EQIAAAx0XrkH61vf%2BpY2btyozs5Ob2weAADAr3nlXYR2u10NDQ2aPHmyMjMzFRMT43pMg3TqkQ0//elPvbFrAAAAn/NKwHrhhRdktVolSTt37uy1noAFAAAGMq8ErO3bt3tjswAAAAHBtHuw/vM//1P79u1zW7Z161a1traatQsAAICAYFrA%2Btvf/qaTJ0%2B6/u50OvWTn/xEBw8eNGsXAAAAAcEr7yL8BI9qAAAAFyKvBiwAAIALkdcD1qcfzwAAAHAhMPVdhLfeemuvQHXzzTf3WmaxWPSXv/zFzF0DAAD4DdMC1rx588zaFAAAQEAjYAEAAJiMm9wBAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATBYQAWvnzp36/ve/r5ycHCUlJenll192W79w4UIlJSW5fcydO9dtTGdnp5YtW6YJEyYoLS1NBQUFcjgcbmNaWlpUWFiojIwMjRs3TkVFRero6PD68QEAgIElIAJWR0eHrrnmGi1duvSMT4afNGmSXn/9db322mt67bXXtHr1arf1ZWVl2r59u9auXauqqio1NTUpPz/fbUxhYaEaGhq0ceNGrVu3Tjt37tSSJUu8dlwAAGBgMvVJ7t4yadIkTZo0SdKZf4F0aGiohgwZctp17e3tqqmp0YMPPqjx48dLksrLyzVjxgzt3r1bKSkp2r9/v3bs2KHNmzcrOTlZklRcXKw77rhDCxYsUGxsrBeODAAADEQBMYPVF3/%2B85%2BVlZWlr371qyopKdGxY8dc6/bu3Sun06mJEye6liUkJCg%2BPl67du2SJNXV1Sk6OtoVriQpKytLFotF9fX15%2B9AAABAwAuIGazPk5OTo2nTpumLX/yiGhsbtXr1at1%2B%2B%2B2qrq6WxWKR3W5XSEiIIiIi3L4uJiZGdrtdkmS323vNgFmtVkVHR7vGAAAA9MWACFgzZsxw/fmqq67SiBEjNHXqVL355pvKzMw8r7U0NTWpubm51/LY2FgNGhR5XmsZKKzWILfPgaHH1wXgAhAcbJG/vxARmOev/6B/nrFag856XY6Li/PavgdEwPqsoUOHavDgwWpsbFRmZqZsNpu6urrU3t7uNovlcDhks9kkSTabTUeOHHHbjtPpVEtLi2tMX1RXV6uysrLX8nnz5vW6qR7nJioqzNcl9Fl3d7evS8AFIDIyTMHBgfHPeCCdv/6I/vXfE0885pPrcmCcmefo8OHDOnbsmOvG9FGjRslqtaq2tlZTp06VJDU0NOjQoUNKS0uTJI0ZM0atra165513XPdh1dbWyjAMpaam9nnfeXl5ys3N7bU8NjZWra0n5HQys3GurNYgRUWFBVj/AqVOBLK2thMKhBmswDt//Qf984zVGnTW67I3BUTA6ujoUGNjo%2BsdhAcPHtR7772n6OhoRUdHq7KyUtOnT5fNZlNjY6NWrlyp4cOHKzs7W5IUERGh2bNnq6KiQlFRUQoPD9eKFSuUnp6ulJQUSVJiYqKys7NVXFyskpISdXV1afny5Zo5c%2BY5fRPi4uLOOOV49OhxdXdzgvSX09kTQP07/btdATN1dxsKlDAfWOev/6F//Xe267I3BUTA2rt3r77zne/IYrHIYrHovvvukyTNmjVLJSUlev/997Vlyxa1trYqLi5O2dnZmj9/vkJCQlzbWLRokaxWqwoKCtTZ2amcnBwtXbrUbT%2BrVq1SaWmp5syZo6CgIE2fPl1FRUXn9VgBoC%2BsQRb5f5A//XMLgQuBxTjTg6VgOmaw%2Bic4OEiDB4cHWP8MzX%2B6XvsOH/d1IW6uHWlTo%2BOE39Ul%2BW9t/lxXkKQDjhO%2BLqWX4TFhumvqCEmWAD1//Qf988wn/fPJvn2yVwCAxw74YfADcIp/3x0JAAAQgAhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgsoAIWDt37tT3v/995eTkKCkpSS%2B//HKvMWvWrFF2drZSU1M1Z84cffDBB27rOzs7tWzZMk2YMEFpaWkqKCiQw%2BFwG9PS0qLCwkJlZGRo3LhxKioqUkdHh1ePDZ4w/PwDAHChCvZ1AX3R0dGha665RrNnz1Z%2Bfn6v9evXr1dVVZXuu%2B8%2BXXbZZXrooYd02223adu2bQoNDZUklZWV6dVXX9XatWsVERGh0tJS5efn6xe/%2BIVrO4WFhXI4HNq4caO6urq0cOFCLVmyRA888MB5O1acmwdf3KcDjhO%2BLqOXzISLfV0CAMCHAiJgTZo0SZMmTZIkGUbvmYFNmzbpzjvv1OTJkyVJ999/v7KysvTSSy9pxowZam9vV01NjR588EGNHz9eklReXq4ZM2Zo9%2B7dSklJ0f79%2B7Vjxw5t3rxZycnJkqTi4mLdcccdWrBggWJjY8/T0eJcHHCc0L7Dx31dRi/DYsJ8XQIAwIcC4iXCszl48KDsdrsyMzNdyyIiIpSamqq6ujpJ0p49e%2BR0OjVx4kTXmISEBMXHx2vXrl2SpLq6OkVHR7vClSRlZWXJYrGovr7%2BPB0NAAAYCAI%2BYNntdlksFtlsNrflMTExstvtkiSHw6GQkBBFRESccYzdbteQIUPc1lutVkVHR7vGAAAA9EVAvEQYSJqamtTc3NxreWxsrAYNivRBRYHPag1y%2B/xvPee/GAB9EhxskRR0lvMXfUH/PGO1Bp31uhwXF%2Be1fQd8wLLZbDIMQ3a73W0Wy%2BFw6JprrnGN6erqUnt7u9sslsPhcH2NzWbTkSNH3LbtdDrV0tLSa3bsbKqrq1VZWdlr%2Bbx58057gz76LirK/b6m7u5uH1UC4PNERoYpOPjfl5jPnr84N/Sv/5544jGfXJcDPmANHTpUNptNb7zxhpKSkiRJ7e3tqq%2Bv10033SRJGjVqlKxWq2prazV16lRJUkNDgw4dOqS0tDRJ0pgxY9Ta2qp33nnHdR9WbW2tDMNQampqn%2BvJy8tTbm5ur%2BWxsbFqbT0hp5NZl3NltQYpKirsNP2jl4C/ams7oU9msE5//qIv6J9nrNags16XvSkgAlZHR4caGxtd7yA8ePCg3nvvPUVHR%2BvSSy/VrbfeqkceeUTDhg3TZZddpjVr1uiSSy7RlClTJJ266X327NmqqKhQVFSUwsPDtWLFCqWnpyslJUWSlJiYqOzsbBUXF6ukpERdXV1avny5Zs6ceU7fhLi4uDNOOR49elzd3Zwg/eV09nymfzxrCvBX3d2GPv2foN7nL84F/eu/s12XvSkgAtbevXv1ne98RxaLRRaLRffdd58kadasWaqoqNDcuXN18uRJLVmyRG1tbRo7dqweffRR1zOwJGnRokWyWq0qKChQZ2encnJytHTpUrf9rFq1SqWlpZozZ46CgoI0ffp0FRUVnddjBQAAgS8gAtb48eP13nvvnXVMfn7%2BWV9LDQ0N1eLFi7V48eIzjomKiuKhogAAwGO8LQEAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADDZgAhYlZWVSkpKcvuYMWOG25g1a9YoOztbqampmjNnjj744AO39Z2dnVq2bJkmTJigtLQ0FRQUyOFwnM/DAAAAA8SACFiSdNVVV%2Bn111/Xa6%2B9ptdee02/%2BMUvXOvWr1%2BvqqoqLV%2B%2BXM8884zCwsJ02223qbOz0zWmrKxM27dv19q1a1VVVaWmpibl5%2Bf74lAAAECAGzABKzg4WEOGDFFMTIxiYmJ08cUXu9Zt2rRJd955pyZPnqwRI0bo/vvvV1NTk1566SVJUnt7u2pqarRw4UKNHz9eycnJKi8v19tvv63du3f76pAAAECAGjAB68CBA8rJydG1116ru%2B%2B%2BWx9%2B%2BKEk6eDBg7Lb7crMzHSNjYiIUGpqqurq6iRJe/bskdPp1MSJE11jEhISFB8fr127dp3fAwEAAAEv2NcFmCE1NVX33nuvrrjiCjU3N2vt2rW6%2Beab9bvf/U52u10Wi0U2m83ta2JiYmS32yVJDodDISEhioiIOOMYAACAvhoQASsnJ8f15xEjRiglJUWTJ0/Wc889p4SEhPNaS1NTk5qbm3stj42N1aBBkee1loHCag1y%2B/xvPee/GAB9EhxskRR0lvMXfUH/PGO1Bp31uhwXF%2Be1fQ%2BIgPVZkZGRGj58uBobGzV%2B/HgZhiG73e42i%2BVwOHTNNddIkmw2m7q6utTe3u42i%2BVwOHrNfH2e6upqVVZW9lo%2Bb948bpr3UFRUmNvfu7u7fVQJgM8TGRmm4OB/X2I%2Be/7i3NC//nviicd8cl0ekAHr%2BPHjamxs1I033qihQ4fKZrPpjTfeUFJSkqRTN7XX19frpptukiSNGjVKVqtVtbW1mjp1qiSpoaFBhw4dUlpa2jntOy8vT7m5ub2Wx8bGqrX1hJxOZl3OldUapKiosNP0j14C/qqt7YQ%2BmcE6/fmLvqB/nrFag856XfamARGw7rvvPuXm5io%2BPl4fffSR1q5dq%2BDgYNezsG699VY98sgjGjZsmC677DKtWbNGl1xyiaZMmSLp1E3vs2fPVkVFhaKiohQeHq4VK1YoPT1dKSkp51RLXFzcGaccjx49ru5uTpD%2Bcjp7PtM/w2e1ADi77m5Dn/5PUO/zF%2BeC/vXf2a7L3jQgAtZHH32kwsJCHTt2TEOGDFFGRoaqq6s1ePBgSdLcuXN18uRJLVmyRG1tbRo7dqweffRRhYaGuraxaNEiWa1WFRQUqLOzUzk5OVq6dKmvDgkAAASwARGwVq9e/blj8vPzz/paa2hoqBYvXqzFixebWRoAALgADYiABQDwH9Ygi/79En7P/70hpUf%2B87K%2BxdcF4AJAwAIAmOqywYP04It/0wHHCV%2BX4mZ4TJjumjrC12XgAkHAAgCY7oDjhPYdPu7rMgCf4cllAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyfhlz%2BgD4/8%2BfLR3w1BXV5cMw/mZOnxXEwAAZ0PAQp%2BsfvFv%2BsB%2BwtdluBkWE%2BbrEgAAOC0CFvrkA8cJ7fvouK/LcGfxdQEAAJwe92ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDIe0wAAuCBYgyzy/wcU8/yZgYKAdRpVVVV6/PHHZbfblZSUpOLiYqWkpPi6LACABy4bPEgPvvg3HXD410OTJWl4TJjumjrC12XARASsz9i2bZvuvfdeLV%2B%2BXKNHj9YTTzyh733ve3r%2B%2Bec1ZMgQX5cHAPDAAccJ7TvsZw9NxoDEPVifsXHjRuXl5WnWrFlKTEzUsmXLNGjQINXU1Pi6NAAAECAIWJ/S1dWlv/71r5o4caJrmcViUVZWlurq6nxYGQAACCQErE85evSonE6nbDab2/KYmBjZ7XYfVQUAGOj%2BfQP%2BZz961N3dLannDOvP1wfOFfdgmaypqUnNzc29lsfGxmrQoEgfVGSGHg2PCfN1Eb0Miwnz2/8hxEdf5Je1%2BWtdkv/WRl3nzl9r89e6JGnc8GjVvP1PfdT6sa9LcfMfURcpb/wwBep8jNUadNbrclxcnNf2TcD6lMGDB8tqtfaarXI4HL1mtc6kurpalZWVvZaPGzdOq1ev9uo305vKbxrrs303NTWpurpaeXl5Ads/X6J/nvmkfz%2Bif/3Cz59n6J9nmpqa9OMf/1hvvfVWr3Xz5s1Tfn6%2B1/ZNwPqUkJAQjRw5UrW1tZoyZYokyTAM1dbW6pZbbunTNvLy8pSbm%2Bu2bP/%2B/brnnnvU3NzMCdIPzc3NqqysVG5uLv3rB/rnGfrnGfrnGfrnmebmZr311ltauXKlEhMT3dbFxsZ6dd8ErM/47ne/q4ULF2rUqFGuxzScPHlSX/va1/r09XFxcZwEAAD4kcTERI0cOfK87pOA9RkzZszQ0aNH9T//8z%2By2%2B265ppr9Nhjj/EMLAAA0GcErNO4%2BeabdfPNN/u6DAAAEKAC820BAAAAfsxaUlJS4usiLgTh4eEaP368wsPDfV1KQKJ/nqF/nqF/nqF/nqF/nvFV/yyGYfAEMQAAABPxEiEAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDIClpesX79eSUlJqqiocFu%2BZs0aZWdnKzU1VXPmzNEHH3zgowr9S2VlpZKSktw%2BZsyY4TaG3p3dRx99pHvuuUcTJkxQamqqbrjhBv31r391G0MPTy83N7fXz19SUpKWL1/uGkPvzqynp0cPPfSQpkyZotTUVE2dOlUPP/xwr3H08MyOHz%2BusrIy5ebmKjU1Vd/61re0Z88etzH075SdO3fq%2B9//vnJycpSUlKSXX36515jP61VnZ6eWLVumCRMmKC0tTQUFBXI4HOYWasB09fX1Rm5urvFf//VfRnl5uWv5unXrjHHjxhl/%2BMMfjPfff9/4wQ9%2BYEyZMsX4%2BOOPfVitf1i7dq1x/fXXGw6Hw7Db7YbdbjeOHj3qWk/vzq6lpcWYPHmysWjRImPPnj3GP//5T%2BO1114zGhsbXWPo4ZkdOXLE9XNnt9uN119/3UhKSjLeeustwzDo3ed55JFHjMzMTGP79u3Gv/71L%2BOFF14w0tLSjJ///OeuMfTw7ObPn29cf/31xs6dO43GxkZj7dq1RkZGhvHRRx8ZhkH/Pm379u3GQw89ZLz44otGUlKS8dJLL7mt70uvlixZYkyePNl48803jb/%2B9a9GXl6e8a1vfcvUOglYJmtvbzemTZtmvP7668a3v/1tt4D1pS99ydiwYYPr721tbcbo0aONZ5991geV%2Bpe1a9cas2bNOuN6end2K1euNG6%2B%2BeazjqGHfbdixQpj2rRprr/Tu7O74447jKKiIrdl%2Bfn5xj333OP6Oz08s5MnTxrJycnG9u3b3ZbfeOONxkMPPWQYBv07k6uvvrpXwPq8XrW1tRkjR440fv/737vG7N%2B/37j66quN%2Bvp602rjJUKTlZaWKjc3VxMnTnRbfvDgQdntdmVmZrqWRUREKDU1VXV1dee7TL904MAB5eTk6Nprr9Xdd9%2BtDz/8UBK964s//vGPGjVqlObPn6%2BsrCzdeOONeuaZZ1zr6WHfdXV1aevWrfr6178uid71RVpammpra3XgwAFJ0nvvvae3335bX/7ylyXRw8/T3d0tp9Op0NBQt%2BWDBg3SX/7yF/p3DvrSqz179sjpdLpdpxMSEhQfH69du3aZVkuwaVuCnn32Wb377ruqqanptc5ut8tischms7ktj4mJkd1uP18l%2Bq3U1FTde%2B%2B9uuKKK9Tc3Ky1a9fq5ptv1u9%2B9zt61wcHDx7UU089pTlz5ugHP/iBdu/erRUrVigkJESzZs2ih%2BfgxRdfVHt7u2688UZJnLt9cfvtt6u9vV3XXXedrFarenp69KMf/UgzZ86URA8/T3h4uMaMGaOHH35YCQkJstls2rp1q%2Brq6nT55ZfTv3PQl145HA6FhIQoIiLijGPMQMAyyeHDh1VeXq4NGzYoJCTE1%2BUEnJycHNefR4wYoZSUFE2ePFnPPfecEhISfFhZYOjp6VFKSop%2B9KMfSZKSkpK0b98%2BPf3005o1a5aPqwssNTU1ysnJUWxsrK9LCRjbtm3T7373O61evVpXXnml3n33XZWVlSkuLo6fvz5auXKlFi1apEmTJik4OFjJycm6/vrre71RBYGDlwhNsnfvXh05ckRf%2B9rXNHLkSI0cOVJvvfWWNm3apFGjRslms8kwjF7p2OFw9ErakCIjIzV8%2BHA1NjbSuz6Ii4tTYmKi27LExETXy6z0sG8OHTqk2tpa/fd//7drGb37fCtXrtTcuXN13XXX6aqrrtINN9yg7373u1q/fr0ketgXQ4cO1c9//nPV1dXpT3/6k375y1%2Bqq6tLQ4cOpX/noC%2B9stls6urqUnt7%2BxnHmIGAZZKsrCxt3bpVv/nNb7RlyxZt2bJFo0aN0g033KAtW7a4TpI33njD9TXt7e2qr69XWlqaDyv3T8ePH1djY6Pi4uLoXR%2BkpaXpH//4h9uyf/zjH4qPj5ckethHNTU1iomJcd07JNG7vjhx4oSsVqvbsqCgIPX09Ej6/%2B3cv0s6cRzH8ddlg2WkhYT9IIgcs6FaXXSItpAaXKqlpSGCNkVFEESKQCRFWlqjod%2BolsgAAAJOSURBVH9Cag4inIIailuiEEJcruHL977JF6zg8%2BX7he/zsd3xHj68lnvd3eeODL/D6/UqGAzq9fVVjUZD8Xic/L7hK1nNzc3J4/Ho6urKnbm7u9Pj46PRPHlFaMjg4KDC4XDXuYGBAQUCAffJwubmpmq1mqanpzU5OalyuaxQKKR4PP43lvxPKZVKisVimpiYkG3bqlQq6u/vd/%2BFRXa9bW1tKZlMql6va2VlRdfX1zo/P1ehUHBnyLA3x3F0cXGhRCKhvr7ue0%2By6y0Wi6lWqykUCikcDuv29lanp6daX193Z8iwt0ajIcdxNDMzo/v7ex0cHGh2dlaJREIS%2BX309vamh4cHOY4j6cce1GazKb/fr/Hx8U%2BzGhoa0tramorFooaHh%2BXz%2BVQoFLSwsKD5%2BXlj66Rg/UGWZXUdb29vq91uK5vNqtVqaWlpSScnJ799OfI/sm1b%2B/v7enl50ejoqBYXF3V2dqaRkRFJZPeZSCSi4%2BNjHR4eqlqtampqSul02t1kLJHhZy4vL/X09ORe0D4iu94ymYzK5bLy%2Bbyen581NjamZDKpnZ0dd4YMe2u1Wjo6OpJt2/L7/VpeXtbe3p77ZJD8frm5udHGxoYsy5JlWSqVSpKk1dVVFYvFL2WVSqXk8Xi0u7urTqejaDSqXC5ndJ2W87MCAgAAwAj2YAEAABhGwQIAADCMggUAAGAYBQsAAMAwChYAAIBhFCwAAADDKFgAAACGUbAAAAAMo2ABAAAYRsECAAAwjIIFAABgGAULAADAMAoWAACAYe/%2BurMHPvUQuwAAAABJRU5ErkJggg%3D%3D"/>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12" id="common160827954858171259">
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">66</td>
+        <td class="number">1086</td>
+        <td class="number">6.1%</td>
+        <td>
+            <div class="bar" style="width:14%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">67</td>
+        <td class="number">1056</td>
+        <td class="number">6.0%</td>
+        <td>
+            <div class="bar" style="width:13%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">64</td>
+        <td class="number">1047</td>
+        <td class="number">5.9%</td>
+        <td>
+            <div class="bar" style="width:13%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">68</td>
+        <td class="number">1009</td>
+        <td class="number">5.7%</td>
+        <td>
+            <div class="bar" style="width:13%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">65</td>
+        <td class="number">1002</td>
+        <td class="number">5.7%</td>
+        <td>
+            <div class="bar" style="width:13%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">63</td>
+        <td class="number">903</td>
+        <td class="number">5.1%</td>
+        <td>
+            <div class="bar" style="width:11%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">69</td>
+        <td class="number">892</td>
+        <td class="number">5.0%</td>
+        <td>
+            <div class="bar" style="width:11%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">70</td>
+        <td class="number">885</td>
+        <td class="number">5.0%</td>
+        <td>
+            <div class="bar" style="width:11%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">71</td>
+        <td class="number">824</td>
+        <td class="number">4.7%</td>
+        <td>
+            <div class="bar" style="width:10%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">62</td>
+        <td class="number">812</td>
+        <td class="number">4.6%</td>
+        <td>
+            <div class="bar" style="width:10%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (39)</td>
+        <td class="number">8165</td>
+        <td class="number">46.2%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12"  id="extreme160827954858171259">
+            <p class="h4">Minimum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">46</td>
+        <td class="number">8</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:7%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">47</td>
+        <td class="number">16</td>
+        <td class="number">0.1%</td>
+        <td>
+            <div class="bar" style="width:14%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">48</td>
+        <td class="number">23</td>
+        <td class="number">0.1%</td>
+        <td>
+            <div class="bar" style="width:20%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">49</td>
+        <td class="number">49</td>
+        <td class="number">0.3%</td>
+        <td>
+            <div class="bar" style="width:43%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">50</td>
+        <td class="number">115</td>
+        <td class="number">0.7%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+            <p class="h4">Maximum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">90</td>
+        <td class="number">5</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">91</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:20%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">92</td>
+        <td class="number">3</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:60%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">93</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:20%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">94</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:20%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+    </div>
+</div>
+</div><div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_Potential">Potential<br/>
+            <small>Numeric</small>
+        </p>
+    </div><div class="col-md-6">
+    <div class="row">
+        <div class="col-sm-6">
+            <table class="stats ">
+                <tr>
+                    <th>Distinct count</th>
+                    <td>48</td>
+                </tr>
+                <tr>
+                    <th>Unique (%)</th>
+                    <td>0.3%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (n)</th>
+                    <td>0</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (n)</th>
+                    <td>0</td>
+                </tr>
+            </table>
+
+        </div>
+        <div class="col-sm-6">
+            <table class="stats ">
+
+                <tr>
+                    <th>Mean</th>
+                    <td>71.182</td>
+                </tr>
+                <tr>
+                    <th>Minimum</th>
+                    <td>46</td>
+                </tr>
+                <tr>
+                    <th>Maximum</th>
+                    <td>94</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Zeros (%)</th>
+                    <td>0.0%</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="col-md-3 collapse in" id="minihistogram1233665439189543586">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABLCAYAAAA1fMjoAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAABHtJREFUeJzt3M9LI2cYB/BvNup2sXRTJAlGKdJLU0Es%2BKtePERJcvHaIRe9ePQigqjIQKv/gbl7EknBc4gaqXgzOdRUUGoPC/mhTYhkF4oWDG8v27iU5TGxOzMZ8/0cJy/M4/h%2BHd%2BZ94lDKaVgsmKxiFgsBk3T4PF4zD492YyV88VhRUCI7KLN6gLogVIK1Wq17vFOpxMOh8PAiogBaSLVahX6z7/iTfn20bF9Xa/w0w/foa2Nv0Ij8eo2mTflW/x%2B/ZfVZdB7L6wugKiZMSBEAgaESMCAEAkYECIBA0IkYECIBAwIkYABIRLwTbrBGtlf1cg%2BLDIHA2KwRvZXff%2B1y4SKqBEMiAnq3V/1VdcrE6qhRnANQiRgQIgEDAiRgAEhEnCRblPOFw6255qAAbGpni8/w4%2B7v7E912C8YjbG9lzjcQ1CJGBAiAQMCJGAASEScJH%2BBNyh2zoYkCfgDt3WwYA8EXfotgauQYgEDAiRgAEhEjAgRAIGhEjAgBAJGBAiAd%2BDtIBGm6sANlj9iwFpAY00VwFssPoQr0CLYHPV03ANQiRgQIgEDAiRgGsQNNbfAbDHo5UwIGisvwN4/j0e/M6tBwzIe4085XnuPR78zq0Hz/OnAtti/696/2A897uNrQKilMLbt%2B/qHhs7yePPd38/Ovbb7s/R18Bdwff6Zd1PN%2Bw2ttHxI32vsfXLH3VdZ%2B8XLzE3%2BY2t7jYOpZQy%2B6TFYhGxWAyapsHj8Zh9erIZK%2BeLJY95S6USotEoSqWSFacnm7FyvvA9CJGAASESMCBEAgaESGBJQNxuN%2Bbn5%2BF2u604PdmMlfPFkse8RHbBf7GIBAwIkYABIRIwIEQCBoRIwIAQCRgQIoFpAdnd3YXf70cymQQA3NzcYG5uDqFQCNPT00in02aVQk1kY2MDgUAAfr8fFxcXtePS/Li7u8Pi4iKCwSDC4TASiYRxBSoT5HI5pWma0jRNHRwcKKWUWllZUZubm0oppTKZjJqYmFD39/dmlENNJJVKqevraxUIBNT5%2BXntuDQ/otGoWl5eVkoplc1m1fj4uKpUKobUZ/gdRCmFtbU16LqO9vb22vF4PI5IJAIAGBgYgNfrxcnJidHlUJMZHh6G1%2BuF%2Bs%2BGDml%2BfPhZb28vxsbGsL%2B/b0h9hgdka2sLQ0ND6O/vrx2rVCqoVqvo6uqqHfP5fLi6ujK6HLKBx%2BZHoVCAz%2Bf76GefmqHNwZeXl9jb28P29raRpyEyjKF3kHQ6jXw%2Bj2AwiEAggNPTU%2Bi6jng8DqfTiXK5XBubz%2BfR3d1tZDlkEy6XS5wfPT09KBQKH/3sUzM0IJFIBMfHx0gmkzg8PMTg4CDW19cRiUQQDoexs7MDAMhkMigWixgdHTWyHLIRaX6EQqHaZ9lsFqlUClNTU4bUYep295mZGczOzmJychLlchlLS0vI5XLo6OiArusYGRkxqxRqErqu4%2BjoCOVyGS6XC52dnUgkEuL8uL29xerqKs7OzuB0OrGwsIBQKGRIfewHIRLwTTqRgAEhEvwD6T%2B4huvoA9EAAAAASUVORK5CYII%3D">
+
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#descriptives1233665439189543586,#minihistogram1233665439189543586"
+       aria-expanded="false" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="row collapse col-md-12" id="descriptives1233665439189543586">
+    <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation" class="active"><a href="#quantiles1233665439189543586"
+                                                  aria-controls="quantiles1233665439189543586" role="tab"
+                                                  data-toggle="tab">Statistics</a></li>
+        <li role="presentation"><a href="#histogram1233665439189543586" aria-controls="histogram1233665439189543586"
+                                   role="tab" data-toggle="tab">Histogram</a></li>
+        <li role="presentation"><a href="#common1233665439189543586" aria-controls="common1233665439189543586"
+                                   role="tab" data-toggle="tab">Common Values</a></li>
+        <li role="presentation"><a href="#extreme1233665439189543586" aria-controls="extreme1233665439189543586"
+                                   role="tab" data-toggle="tab">Extreme Values</a></li>
+
+    </ul>
+
+    <div class="tab-content">
+        <div role="tabpanel" class="tab-pane active row" id="quantiles1233665439189543586">
+            <div class="col-md-4 col-md-offset-1">
+                <p class="h4">Quantile statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Minimum</th>
+                        <td>46</td>
+                    </tr>
+                    <tr>
+                        <th>5-th percentile</th>
+                        <td>62</td>
+                    </tr>
+                    <tr>
+                        <th>Q1</th>
+                        <td>67</td>
+                    </tr>
+                    <tr>
+                        <th>Median</th>
+                        <td>71</td>
+                    </tr>
+                    <tr>
+                        <th>Q3</th>
+                        <td>75</td>
+                    </tr>
+                    <tr>
+                        <th>95-th percentile</th>
+                        <td>82</td>
+                    </tr>
+                    <tr>
+                        <th>Maximum</th>
+                        <td>94</td>
+                    </tr>
+                    <tr>
+                        <th>Range</th>
+                        <td>48</td>
+                    </tr>
+                    <tr>
+                        <th>Interquartile range</th>
+                        <td>8</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-4 col-md-offset-2">
+                <p class="h4">Descriptive statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Standard deviation</th>
+                        <td>6.0884</td>
+                    </tr>
+                    <tr>
+                        <th>Coef of variation</th>
+                        <td>0.085533</td>
+                    </tr>
+                    <tr>
+                        <th>Kurtosis</th>
+                        <td>0.17123</td>
+                    </tr>
+                    <tr>
+                        <th>Mean</th>
+                        <td>71.182</td>
+                    </tr>
+                    <tr>
+                        <th>MAD</th>
+                        <td>4.8165</td>
+                    </tr>
+                    <tr class="">
+                        <th>Skewness</th>
+                        <td>0.2139</td>
+                    </tr>
+                    <tr>
+                        <th>Sum</th>
+                        <td>1258564</td>
+                    </tr>
+                    <tr>
+                        <th>Variance</th>
+                        <td>37.069</td>
+                    </tr>
+                    <tr>
+                        <th>Memory size</th>
+                        <td>276.3 KiB</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-8 col-md-offset-2" id="histogram1233665439189543586">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQCAYAAAByNR6YAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAAIABJREFUeJzt3XtcVPed//H3MGAkIEQZWMVqE7CIiCLglYK7YqwPazZrUlvX2NSw1l6skqTUNgriBZAmahIWqw81qcaGTawllzUxSTXN0rXBPmIUNDGJXfFCaxRmNFy8hNv5/eEv00xRRDjjzOjr%2BXjkYTjny/l%2B5sMM5813zsxYDMMwBAAAANP4eboAAACAmw0BCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwmU8ErDNnzmjhwoUaM2aMEhISdO%2B99%2BrDDz90GVNUVKTU1FQlJCQoIyNDJ06ccNnf1NSk5cuXa8yYMUpMTFRmZqYcDofLmLq6OmVlZSk5OVmjRo1Sdna2Lly40O36a2pqVFxcrJqamm4f61ZE/7qH/nUP/ese%2Btc99K97PNk/rw9Y9fX1mjlzpnr06KFnn31WO3fu1GOPPaaQkBDnmI0bN6qkpER5eXnavn27AgMDNWfOHDU1NTnHFBQUqKysTMXFxSopKVFNTY0WLFjgMldWVpaqqqq0ZcsWbdiwQfv27VNubm63b0Ntba3Wrl2r2trabh/rVkT/uof%2BdQ/96x761z30r3s82T%2BvD1gbN25UZGSkCgoKFB8fr/79%2ByslJUUDBgxwjtm6davmzZunCRMmKCYmRk888YRqamq0e/duSVJjY6NKS0u1aNEijR49WnFxcVq5cqX279%2BvgwcPSpKOHj2qPXv2qKCgQMOGDVNSUpJycnK0c%2BdO7tgAAOC6eH3AeueddxQfH6%2BHH35YKSkpuu%2B%2B%2B7R9%2B3bn/urqatntdo0dO9a5LTg4WAkJCaqoqJAkHTp0SK2trRo3bpxzTFRUlCIjI3XgwAFJUkVFhUJDQxUXF%2Bcck5KSIovFosrKSnffTAAAcBPx%2BoBVXV2tF154QXfddZd%2B/etfa%2BbMmcrPz9crr7wiSbLb7bJYLLLZbC7fFxYWJrvdLklyOBwKCAhQcHDwVcfY7Xb16dPHZb/ValVoaKhzDAAAQGf4e7qAa2lra9Pw4cP1yCOPSJJiY2N15MgRvfjii5o2bZqHq2uvpqam3VOKR48e9VA1AADgSufh8PBwRUREuG1Orw9YERERio6OdtkWHR2tXbt2SZJsNpsMw5DdbndZxXI4HBoyZIhzTHNzsxobG11WsRwOh/N7bDabzp496zJPa2ur6urq2q2OdWTbtm1au3Ztu%2B0/%2BclPNHTo0E4fB383dOhQffLJJ54uw2fRv%2B6hf91D/7qH/nXP0KFDNWrUKC1cuLDdvvnz57d7sZuZvD5gJSYm6tixYy7bjh07psjISEnSgAEDZLPZtHfvXsXGxkq6fFF7ZWWlHnjgAUlSfHy8rFarysvLNWnSJElSVVWVTp06pcTEREnSiBEjVF9fr8OHDzuvwyovL5dhGEpISOh0vTNmzFB6enq77eHh4aqvv6jW1rbr7ACsVj%2BFhATSvy6if91D/7qH/nUP/eseq9VPTz755BVfrBYeHu7Wub0%2BYD300EOaOXOmNmzYoClTpqiyslLbt29Xfn6%2Bc8zs2bO1fv16DRw4UP3791dRUZH69u2riRMnSrp80fv06dNVWFiokJAQBQUFKT8/X0lJSRo%2BfLiky6tiqampysnJ0bJly9Tc3Ky8vDxNnTr1un4IERERV11yPHfuvFpaeIB0VWtrG/3rBvrXPfSve%2Bhf99C/ruvovOxOFsMwjBs%2B63UqKyvT6tWrdfLkSX3lK19RRkaGpk%2Bf7jKmuLhY27ZtU0NDg0aOHKnc3Fx99atfde5vamrS448/rtdee01NTU1KS0vT0qVLFRYW5hxTX1%2BvFStW6J133pGfn58mT56s7OxsBQYGmnI7CFhd4%2B/vp969g%2BhfF9G/7qF/3UP/uof%2Bdc8X/fMEnwhYNwseIF3DL5juoX/dQ/%2B6h/51D/3rHk8GLK9/mwYAAABfQ8ACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABM5u/pAgDAuxlqaWmR1CbJ8HQxV2DxdAEAroCABQAdMpT72wodd1z0dCEu7gwL1KOTYjxdBoCrIGABwDUcd1zUkdPnPV0GAB/CNVgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYzOsD1tq1axUbG%2Bvy3ze/%2BU2XMUVFRUpNTVVCQoIyMjJ04sQJl/1NTU1avny5xowZo8TERGVmZsrhcLiMqaurU1ZWlpKTkzVq1ChlZ2frwoULbr99AADg5uP1AUuSvva1r%2Bndd9/Vn/70J/3pT3/Sf/3Xfzn3bdy4USUlJcrLy9P27dsVGBioOXPmqKmpyTmmoKBAZWVlKi4uVklJiWpqarRgwQKXObKyslRVVaUtW7Zow4YN2rdvn3Jzc2/YbQQAADcPnwhY/v7%2B6tOnj8LCwhQWFqY77rjDuW/r1q2aN2%2BeJkyYoJiYGD3xxBOqqanR7t27JUmNjY0qLS3VokWLNHr0aMXFxWnlypXav3%2B/Dh48KEk6evSo9uzZo4KCAg0bNkxJSUnKycnRzp07VVtb65HbDAAAfJdPBKzjx48rLS1Nd999t372s5/p008/lSRVV1fLbrdr7NixzrHBwcFKSEhQRUWFJOnQoUNqbW3VuHHjnGOioqIUGRmpAwcOSJIqKioUGhqquLg455iUlBRZLBZVVlbeiJsIAABuIv6eLuBaEhIS9Mtf/lJ33XWXamtrVVxcrFmzZum1116T3W6XxWKRzWZz%2BZ6wsDDZ7XZJksPhUEBAgIKDg686xm63q0%2BfPi77rVarQkNDnWMAAAA6y%2BsDVlpamvP/Y2JiNHz4cE2YMEFvvPGGoqKiPFjZldXU1FzxacXw8HD17NnLAxX5PqvVz%2BVfXB/61z1%2BXtw2f3%2BLvP2JCO5/3UP/usdq9evwvBwREeG2ub0%2BYP2jXr166c4779TJkyc1evRoGYYhu93usorlcDg0ZMgQSZLNZlNzc7MaGxtdVrEcDofze2w2m86ePesyT2trq%2Brq6tqtjl3Ltm3btHbt2nbb58%2Bf3%2B7CelyfkJBAT5fg0%2Bhf17S0tHi6hKvq1StQ/v6%2B8Wuc%2B1/30L%2Bue%2B65ZzxyXvaNR%2BaXnD9/XidPntR9992nAQMGyGazae/evYqNjZV0%2BaL2yspKPfDAA5Kk%2BPh4Wa1WlZeXa9KkSZKkqqoqnTp1SomJiZKkESNGqL6%2BXocPH3Zeh1VeXi7DMJSQkHBd9c2YMUPp6enttoeHh6u%2B/qJaW9u6fNtvVVarn0JCAulfF9G/7vHmFayGhovyhRUs7n9dR/%2B6x2r16/C87E5eH7Aef/xxpaenKzIyUmfOnFFxcbH8/f2d74U1e/ZsrV%2B/XgMHDlT//v1VVFSkvn37auLEiZIuX/Q%2Bffp0FRYWKiQkREFBQcrPz1dSUpKGDx8uSYqOjlZqaqpycnK0bNkyNTc3Ky8vT1OnTr3uH0BERMRVlxzPnTuvlhYeIF3V2tpG/7qB/nWNNy8QtbQYknzjZ8r9r3voX9d1dF52Jy/%2B1XHZmTNnlJWVpc8%2B%2B0x9%2BvRRcnKytm3bpt69e0uS5s6dq0uXLik3N1cNDQ0aOXKkNm3apB49ejiPsXjxYlmtVmVmZqqpqUlpaWlaunSpyzxr1qzRihUrlJGRIT8/P02ePFnZ2dk39LYCAICbg8UwDMPTRdwqWMHqGn9/P/XuHUT/uoj%2BdY%2B/v/ST5yt05PR5T5fiIqZvkIr%2BPUGSxdOldIj7X/fQv%2B75on%2Be4N1P3gMAAPggAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAm8/d0AQBwmeHpAgDANAQsAF7jqV1HdNxx0dNluBgbdYenSwDggwhYALzGccdFHTl93tNluBgYFujpEgD4IK7BAgAAMJnPBayNGzcqNjZWhYWFLtuLioqUmpqqhIQEZWRk6MSJEy77m5qatHz5co0ZM0aJiYnKzMyUw%2BFwGVNXV6esrCwlJydr1KhRys7O1oULF9x%2BmwAAwM3FpwLWwYMHtW3bNsXGxrps37hxo0pKSpSXl6ft27crMDBQc%2BbMUVNTk3NMQUGBysrKVFxcrJKSEtXU1GjBggUux8nKylJVVZW2bNmiDRs2aN%2B%2BfcrNzb0htw0AANw8fCZgnT9/XgsXLlR%2Bfr569erlsm/r1q2aN2%2BeJkyYoJiYGD3xxBOqqanR7t27JUmNjY0qLS3VokWLNHr0aMXFxWnlypXav3%2B/Dh48KEk6evSo9uzZo4KCAg0bNkxJSUnKycnRzp07VVtbe8NvLwAA8F0%2BE7BWrFih9PR0jRs3zmV7dXW17Ha7xo4d69wWHByshIQEVVRUSJIOHTqk1tZWl%2B%2BNiopSZGSkDhw4IEmqqKhQaGio4uLinGNSUlJksVhUWVnpzpsGAABuMj7xKsLXX39dH330kUpLS9vts9vtslgsstlsLtvDwsJkt9slSQ6HQwEBAQoODr7qGLvdrj59%2Brjst1qtCg0NdY4BAADoDK8PWKdPn9bKlSu1efNmBQQEeLqca6qpqbniU4rh4eHq2bPXFb4D12K1%2Brn8i%2BvjO/1r83QBPsff3yJvfyLCd%2B5/3on%2BdY/V6tfheTkiIsJtc3t9wPrggw909uxZ3X///TKMy%2B/03Nraqn379qmkpERvvPGGDMOQ3W53WcVyOBwaMmSIJMlms6m5uVmNjY0uq1gOh8P5PTabTWfPnnWZu7W1VXV1de1Wxzqybds2rV27tt32%2BfPnt7uoHtcnJIT3I%2BoOb%2B9fS0uLp0vwOb16Bcrf3%2Bt/jUvy/vuft6N/Xffcc8945Lzs9Y/MlJQU7dixw2XbY489pujoaP3gBz/QgAEDZLPZtHfvXuerCxsbG1VZWakHHnhAkhQfHy%2Br1ary8nJNmjRJklRVVaVTp04pMTFRkjRixAjV19fr8OHDzuuwysvLZRiGEhISOl3vjBkzlJ6e3m57eHi46usvqrWVv9Kvl9Xqp5CQQPrXRb7TP2%2BuzTs1NFyUL6xg%2Bcb9zzvRv%2B6xWv06PC%2B7k9cHrNtvv12DBg1y2RYYGKg77rhD0dHRkqTZs2dr/fr1GjhwoPr376%2BioiL17dtXEydOlHT5ovfp06ersLBQISEhCgoKUn5%2BvpKSkjR8%2BHBJUnR0tFJTU5WTk6Nly5apublZeXl5mjp16nX9ECIiIq665Hju3Hm1tPAA6arW1jb61w3e3z8%2Bi/B6tbQY8pVg6v33P%2B9G/7quo/OyO3l9wLoSi8Xi8vXcuXN16dIl5ebmqqGhQSNHjtSmTZvUo0cP55jFixfLarUqMzNTTU1NSktL09KlS12Os2bNGq1YsUIZGRny8/PT5MmTlZ2dfUNuEwAAuHlYjC8ubILbsYLVNf7%2BfurdO4j%2BdZHv9M/Qwy9Wet1nEd491KaTXvgZiTF9g1T07wmSLNcc60m%2Bc//zTvSve77onyd495P3AAAAPoiABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMrcErMbGRnccFgAAwCe4JWClpqbqscce03vvveeOwwMAAHg1twSsrKwsffLJJ3rwwQf1jW98Qxs2bNCZM2fcMRUAAIDXcUvAevDBB/Xyyy/rpZde0vjx47V582alp6frBz/4gXbt2qWWlhZ3TAsAAOAV3HqRe1xcnHJycvS///u/Wr16terr65WZmanx48fr8ccfV3V1tTunBwAA8Ai3v4rQMAyVl5frzTff1Icffqg%2BffpowoQJevPNNzVlyhT97ne/c3cJAAAAN5S/uw5cXV2t0tJSvfLKK6qpqVFKSorWrFmj9PR0%2Bfv7q62tTatWrdJTTz2l6dOnu6sMAACAG84tAevBBx/U%2B%2B%2B/r/DwcH3rW9/S9OnTFRkZ6TLGz89PU6ZM0ebNm91RAgAAgMe4JWD16tVL69at0/jx4%2BXnd/VnIWNjY/X73//eHSUAAAB4jFsC1rp16zo1rkePHho4cKA7SgAAAPAYt1zk/sYbb%2BjXv/71Ffdt3rxZb731ljumBQAA8ApuCVgbNmyQ1Wq94r6AgABt2LDBHdMCAAB4BbcErBMnTigmJuaK%2BwYNGqRjx465Y1oAAACv4JaAFRAQoLNnz15xn91uv%2BrqFgAAwM3ALQFr5MiR2rRpky5duuSy/dKlS3r22Wc1atQod0wLAADgFdzyKsKf/vSnmjFjhu6%2B%2B25NmTJFERERqqmp0ZtvvqmLFy9q1apV7pgWAADAK7glYA0aNEi/%2B93vVFRUpB07dqiurk6hoaFKSUnR/PnzFRUV5Y5pAQAAvILbPirnrrvu0tNPP%2B2uwwMAAHgtt3/YMwAAwK3GLStYhmGotLRUb731lk6fPq2mpqZ2Y3izUQAAcLNyS8Bas2aNnnnmGSUlJSkxMVEBAQHumAYAAMAruSVgvfLKK5o/f77mz5/vjsMDAAB4Nbdcg/X5558rOTnZHYcGAADwem4JWPfcc4/KysrccWgAAACv55anCEeOHKknn3xSDodDX//619WrV692YyZOnOiOqQHglmD1s0gyPF3GNVg8XQDgMW4JWFlZWZKkv/3tb9qxY0e7/RaLRR999JE7pgaAW0L/3j311K6/6LjjoqdLaefOsEA9OinG02UAHuWWgPX73//eHYcFAHzJccdFHTl93tNlALgCtwSsgQMHuuOwAAAAPsFtH5UjSe%2B%2B%2B64OHTqkTz/9VD/84Q/Vr18/vf/%2B%2BxowYIAiIiLcOTUAAIDHuCVgnT17VgsWLND%2B/fsVHh6u2tpaffvb31a/fv20bds2BQcHKzc31x1TAwAAeJxb3qZh5cqVqqmp0auvvqo//OEPMoy/v9IlJSVF5eXl7pgWAADAK7glYJWVlenRRx9VTEyMLBbXl%2BlGRkbq9OnT7pgWAADAK7glYLW0tCgoKOiK%2B%2Brr6%2BXv3/lnJl944QXde%2B%2B9Sk5OVnJysv793/9df/zjH13GFBUVKTU1VQkJCcrIyNCJEydc9jc1NWn58uUaM2aMEhMTlZmZKYfD4TKmrq5OWVlZSk5O1qhRo5Sdna0LFy50uk4AAIAvuCVgDRs2TC%2B99NIV973xxhtKSkrq9LH69eunn/3sZ3r55Zf10ksvacyYMZo3b56OHj0qSdq4caNKSkqUl5en7du3KzAwUHPmzFFTU5PzGAUFBSorK1NxcbFKSkpUU1OjBQsWuMyTlZWlqqoqbdmyRRs2bNC%2Bffu4TgwAAHSJWwLWww8/rD/84Q/63ve%2BpxdffFEWi0XvvPOOfvrTn2rXrl3X9SHQ//Iv/6Lx48dr4MCB%2BupXv6pHH31UQUFBqqiokCRt3bpV8%2BbN04QJExQTE6MnnnhCNTU12r17tySpsbFRpaWlWrRokUaPHq24uDitXLlS%2B/fv18GDByVJR48e1Z49e1RQUKBhw4YpKSlJOTk52rlzp2pra81vEAAAuKm5JWAlJydr8%2BbNampqUn5%2BvgzD0K9%2B9Sv99a9/1a9//WsNGzasS8dta2vT66%2B/rosXLyoxMVHV1dWy2%2B0aO3asc0xwcLASEhKcAezQoUNqbW3VuHHjnGOioqIUGRmpAwcOSJIqKioUGhqquLg455iUlBRZLBZVVlZ2qVYAAHDrctv7YI0cOVIvvviiLly4oM8%2B%2B0whISEKDg7u0rGOHDmiGTNmqKmpSUFBQVq7dq2ioqJ04MABWSwW2Ww2l/FhYWGy2%2B2SJIfDoYCAgHZzf3mM3W5Xnz59XPZbrVaFhoY6xwAAAHSWW99oVJJuv/123X777d06RlRUlP77v/9bDQ0Neuutt/SLX/xCzz//vEkVmqumpuaKTyuGh4erZ8/2H3qNa7Na/Vz%2BxfXxnf61eboAmMjf3yLJz4fuf96J/nWP1erX4XnZnW967paAtWTJkmuOycvL6/Tx/P39NWDAAElSXFycDh48qK1bt%2Br73/%2B%2BDMOQ3W53WcVyOBwaMmSIJMlms6m5uVmNjY0uq1gOh8P5PTabTWfPnnWZs7W1VXV1de1Wx65l27ZtWrt2bbvt8%2BfPb3dhPa5PSEigp0vwad7ev5aWFk%2BXABP16hXo8opxb7//eTv613XPPfeMR87LbglYX1z/9GV1dXWqra3VHXfccd2h5R%2B1tbWpqalJAwYMkM1m0969exUbGyvp8kXtlZWVeuCBByRJ8fHxslqtKi8v16RJkyRJVVVVOnXqlBITEyVJI0aMUH19vQ4fPuy8Dqu8vFyGYSghIeG6apsxY4bS09PbbQ8PD1d9/UW1tvJX%2BvWyWv0UEhJI/7rId/rnzbXhejU0XNQXK1i%2Bcf/zTvSve6xWvw7Py%2B7kloC1Y8eOK24/cuSIFi5cqJycnE4f68knn9T48ePVr18/nT9/Xjt27NB7772nZ599VpI0e/ZsrV%2B/XgMHDlT//v1VVFSkvn37auLEiZIuX/Q%2Bffp0FRYWKiQkREFBQcrPz1dSUpKGDx8uSYqOjlZqaqpycnK0bNkyNTc3Ky8vT1OnTr3uH0BERMRVlxzPnTuvlhYeIF3V2tpG/7rB%2B/tnXHsIfEZLi6Evh2bvv/95N/rXdR2dl93J7ddgfVlMTIy%2B//3vq6CgQK%2B88kqnvsfhcOgXv/iFamtr1atXLw0ePFjPPvus81WBc%2BfO1aVLl5Sbm6uGhgaNHDlSmzZtUo8ePZzHWLx4saxWqzIzM9XU1KS0tDQtXbrUZZ41a9ZoxYoVysjIkJ%2BfnyZPnqzs7GzzbjwAALhl3NCAJUkhISHt3mm9IwUFBdccs2DBgg6fR%2B3Ro4eWLFnS4bVhISEhWr16dafrAgAAuBq3BKzGxsZ225qamlRVVaWioiINGjTIHdMCAAB4BbcErJEjR7b7kGdJMgxDERERWrdunTumBQAA8ApuCVhXeguG2267TX379lViYqICAgLcMS0AAIBXcEvA%2Bva3v%2B2OwwIAAPgE3hoWAADAZG5ZwRo6dOgVr8G6mg8%2B%2BMAdZQAAAHiEWwLWww8/rJKSElmtVqWnp8tms8lut%2Bvtt9%2BWYRiaNWuWrFarO6YGAADwOLcErIaGBsXGxmrdunUuQWrRokX68Y9/rM8%2B%2B0wLFy50x9QAAAAe55ZrsF566aUrrlJZrVbNmjVLL730kjumBQAA8ApuCVgXLlzQp59%2BesV9n376qT7//HN3TAsAAOAV3PIU4cSJE7V69WoFBgbq7rvv1u23364LFy5o165dWrNmzRU/1RoAAOBm4ZaAtXTpUv3iF7/Qz3/%2Bc1ksFt122236/PPPZRiGJkyY0O6DlgEAAG4mbglYvXr10rp16/TJJ5/o4MGDstvtCg8P17BhwzR48GB3TAkAAOA13BKwvjB48GACFQAAuOW47Z3cW1patH37duXm5mru3Lk6ceKEJOnNN99UVVWVu6YFAADwOLesYFVXV%2Bs//uM/ZLfbNXjwYFVWVqqxsVGSVF5errKyMhUWFrpjagAAAI9zywpWQUGBQkJCtHv3bj3//PMyDMO5b8yYMdq3b587pgUAAPAKbglYf/7znzVv3jyFhYW1%2B0zC8PBw1dTUuGNaAAAAr%2BCWgOXn5%2BeyavVldrtdt99%2BuzumBQAA8ApuCVijRo3S1q1b1dLS4tz2xUrW7373O40dO9Yd0wIAAHgFt1zknpWVpZkzZ2rq1Km6%2B%2B67ZbFY9OKLL%2BrIkSOqqqrSb3/7W3dMCwAA4BXcsoL1ta99TaWlpYqPj3d%2BsPNbb72lfv366be//a3uvPNOd0wLAADgFUxfwTIMQ%2BfPn1dkZKTWrFlj9uEBAAC8nukrWM3NzRo9erT27Nlj9qEBdJvh5f8BwM3B9BWsHj166J/%2B6Z%2Bu%2BipCAJ711K4jOu646Oky2hkbdYenSwAA07jlIveZM2dqy5YtSk1NVY8ePdwxBYAuOu64qCOnz3u6jHYGhgV6ugQAMI1bApbdbldVVZUmTJigsWPHtnvDUYvFoscee8wdUwMAAHicWwLWW2%2B9JavVKklX/FgcAhYAALiZuSVglZWVueOwAAAAPsG0VxH%2B67/%2Bq44cOeKybceOHaqvrzdrCgAAAJ9gWsD6y1/%2BokuXLjm/bm1t1c9//nNVV1ebNQUAAIBPcMs7uX%2BBt2oAAAC3IrcGLAAAgFuR2wPWl9%2BeAQAA4FZg6qsIZ8%2Be3S5QzZo1q902i8Wi999/38ypAQAAvIZpAWv%2B/PlmHQoAAMCnEbAAAABMxkXuAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACbz%2BoC1YcMGTZ8%2BXUlJSUpJSdFPfvITHTt2rN24oqIipabHDttmAAAWgklEQVSmKiEhQRkZGTpx4oTL/qamJi1fvlxjxoxRYmKiMjMz5XA4XMbU1dUpKytLycnJGjVqlLKzs3XhwgW33j4AAHDz8fqAtW/fPn33u9/V9u3btXnzZrW0tGjOnDkuHyy9ceNGlZSUKC8vT9u3b1dgYKDmzJmjpqYm55iCggKVlZWpuLhYJSUlqqmp0YIFC1zmysrKUlVVlbZs2aINGzZo3759ys3NvWG3FQAA3By8PmBt2rRJ06ZNU3R0tAYPHqzCwkKdOnVKH3zwgXPM1q1bNW/ePE2YMEExMTF64oknVFNTo927d0uSGhsbVVpaqkWLFmn06NGKi4vTypUrtX//fh08eFCSdPToUe3Zs0cFBQUaNmyYkpKSlJOTo507d6q2ttYjtx0AAPgmrw9Y/6ihoUEWi0V33HGHJKm6ulp2u11jx451jgkODlZCQoIqKiokSYcOHVJra6vGjRvnHBMVFaXIyEgdOHBAklRRUaHQ0FDFxcU5x6SkpMhisaiysvJG3DQAAHCT8KmAZRiGVq5cqeTkZA0aNEiSZLfbZbFYZLPZXMaGhYXJbrdLkhwOhwICAhQcHHzVMXa7XX369HHZb7VaFRoa6hwDAADQGaZ%2B2LO7LVu2TP/3f/%2BnF154wdOlXFVNTc0Vn1IMDw9Xz569PFCR77Na/Vz%2BxfVx7V%2BbZ4vBLcPf3yLJj8dvN9G/7rFa/To8L0dERLhtbp8JWCtWrNAf//hHlZSUuDTEZrPJMAzZ7XaXVSyHw6EhQ4Y4xzQ3N6uxsdFlFcvhcDi/x2az6ezZsy5ztra2qq6urt3qWEe2bdumtWvXtts%2Bf/78dhfV4/qEhAR6ugSfFhISqJaWFk%2BXgVtEr16B8vf/%2BymGx2/30L%2Bue%2B65ZzxyXvaJgLVixQq9/fbbev755xUZGemyb8CAAbLZbNq7d69iY2MlXb6ovbKyUg888IAkKT4%2BXlarVeXl5Zo0aZIkqaqqSqdOnVJiYqIkacSIEaqvr9fhw4ed12GVl5fLMAwlJCR0utYZM2YoPT293fbw8HDV119UaysrCNfLavVTSEgg/esi1/4RsHBjNDRc1BcrWDx%2Bu47%2BdY/V6tfhedmdvD5gLVu2TK%2B//rrWr1%2BvwMBA5/VQvXr10m233SZJmj17ttavX6%2BBAweqf//%2BKioqUt%2B%2BfTVx4kRJly96nz59ugoLCxUSEqKgoCDl5%2BcrKSlJw4cPlyRFR0crNTVVOTk5WrZsmZqbm5WXl6epU6de1w8hIiLiqkuO586dV0sLD5Cuam1to3/dcLl/hqfLwC3i8n3t749XHr/dQ/%2B6rqPzsjt5fcB68cUXZbFY9OCDD7psLyws1LRp0yRJc%2BfO1aVLl5Sbm6uGhgaNHDlSmzZtUo8ePZzjFy9eLKvVqszMTDU1NSktLU1Lly51OeaaNWu0YsUKZWRkyM/PT5MnT1Z2drb7byQAALipeH3A%2Bvjjjzs1bsGCBR0%2Bl9qjRw8tWbJES5YsueqYkJAQrV69%2BrprBAAA%2BDJelgAAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMn8PV0AAODmYvWzSDL%2B/1dtamlpkdT2pW2eZvF0AbgFELAAAKbq37unntr1Fx13XPR0KS7uDAvUo5NiPF0GbhEELACA6Y47LurI6fOeLgPwGK7BAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkPhGw9u3bpx/96EdKS0tTbGys3n777XZjioqKlJqaqoSEBGVkZOjEiRMu%2B5uamrR8%2BXKNGTNGiYmJyszMlMPhcBlTV1enrKwsJScna9SoUcrOztaFCxfcetsAAMDNxycC1oULFzRkyBAtXbpUFkv7d%2BDduHGjSkpKlJeXp%2B3btyswMFBz5sxRU1OTc0xBQYHKyspUXFyskpIS1dTUaMGCBS7HycrKUlVVlbZs2aINGzZo3759ys3NdfvtAwAANxefCFjjx4/Xww8/rLvvvluG0f6jFrZu3ap58%2BZpwoQJiomJ0RNPPKGamhrt3r1bktTY2KjS0lItWrRIo0ePVlxcnFauXKn9%2B/fr4MGDkqSjR49qz549Kigo0LBhw5SUlKScnBzt3LlTtbW1N/T2AgAA3%2BYTAasj1dXVstvtGjt2rHNbcHCwEhISVFFRIUk6dOiQWltbNW7cOOeYqKgoRUZG6sCBA5KkiooKhYaGKi4uzjkmJSVFFotFlZWVN%2BjWAACAm4HPByy73S6LxSKbzeayPSwsTHa7XZLkcDgUEBCg4ODgq46x2%2B3q06ePy36r1arQ0FDnGAAAgM7gswhNVlNTc8WnFMPDw9WzZy8PVOT7rFY/l39xfVz71%2BbZYgAP8/e3yJfWFvj91z1Wq1%2BH5%2BWIiAi3ze3zActms8kwDNntdpdVLIfDoSFDhjjHNDc3q7Gx0WUVy%2BFwOL/HZrPp7NmzLsdubW1VXV1du9Wxjmzbtk1r165tt33%2B/PntLqrH9QkJCfR0CT4tJCRQLS0tni4D8KhevQLl7%2B97pz5%2B/3Xdc88945Hzsu/dy/7BgAEDZLPZtHfvXsXGxkq6fFF7ZWWlHnjgAUlSfHy8rFarysvLNWnSJElSVVWVTp06pcTEREnSiBEjVF9fr8OHDzuvwyovL5dhGEpISOh0PTNmzFB6enq77eHh4aqvv6jWVlYQrpfV6qeQkED610Wu/SNg4dbW0HBRvraCxe%2B/rrNa/To8L7uTTwSsCxcu6OTJk85XEFZXV%2Bvjjz9WaGio%2BvXrp9mzZ2v9%2BvUaOHCg%2Bvfvr6KiIvXt21cTJ06UdPmi9%2BnTp6uwsFAhISEKCgpSfn6%2BkpKSNHz4cElSdHS0UlNTlZOTo2XLlqm5uVl5eXmaOnXqdf0QIiIirrrkeO7cebW08ADpqtbWNvrXDZf71/5VuMCt5PJjwPd%2Bj/D7r%2Bs6Oi%2B7k08ErA8%2B%2BEDf%2B973ZLFYZLFY9Pjjj0uSpk2bpsLCQs2dO1eXLl1Sbm6uGhoaNHLkSG3atEk9evRwHmPx4sWyWq3KzMxUU1OT0tLStHTpUpd51qxZoxUrVigjI0N%2Bfn6aPHmysrOzb%2BhtBQAAvs8nAtbo0aP18ccfdzhmwYIFHT6X2qNHDy1ZskRLliy56piQkBCtXr26y3UCAABIvvRENAAAgI8gYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmMzf0wUANyfD0wV8SZtaWloktcm76gKAmxcBC3CTp3Yd0XHHRU%2BX4WJs1B2eLgEAbgkELMBNjjsu6sjp854uw8XAsEBPlwAAtwSuwQIAADAZAQsAAMBkBCwAAACTEbAAAABMxkXuAIBbgtXPIu9/qxKLpwuASQhYAIBbQv/ePfXUrr943dunSNKdYYF6dFKMp8uAiQhYAIBbhje%2BfQpuTlyDBQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYV1BSUqL09HQNHz5c3/nOd3Tw4EFPlwQAAHwIAesf7Ny5U7/85S%2BVmZmpl19%2BWbGxsfr%2B97%2Bvs2fPero0AADgIwhY/2DLli2aMWOGpk2bpujoaC1fvlw9e/ZUaWmpp0tDO4aX/wcAuFX5e7oAb9Lc3KwPP/xQP/zhD53bLBaLUlJSVFFR4cHKcDVP7Tqi446Lni6jnbFRd3i6BAA%2BxOpn0ZX/MGtTS0uLpLar7L9RLB6c2zcRsL7k3Llzam1tlc1mc9keFhamY8eOeagqdOS446KOnD7v6TLaGRgW6OkSAPiQ/r176qldf/G6PxjvDAvUo5NiPF2GTyJgmaympka1tbXttoeHh6tnz14eqMgMhj6tO%2B%2Bxv18sFoscFy6qpaVNhvH3v%2BD8rRbd6aVBJjL0Nq98/t1b65K8tzbqun7eWpu31iVdru103eeeLuOK/P0t8tUriqxWvw7PyxEREW6bm4D1Jb1795bVapXdbnfZ7nA42q1qXc22bdu0du3adttHjRqlJ5980q0/THfq3TvYY3PX1NRo27YXNGPGDEVE/JPLvpUP%2BGY/b6TL/dv2//tHv67XF/17hP51Cfe/7qF/3VNTU6Of/vSneu%2B999rtmz9/vhYsWOC2uQlYXxIQEKChQ4eqvLxcEydOlCQZhqHy8nI9%2BOCDnTrGjBkzlJ6e7rLt6NGjWrhwoWpra3mAdEFtba3Wrl2r9PR0%2BtcF9K976F/30L/uoX/dU1tbq/fee0%2BrVq1SdHS0y77w8HC3zk3A%2BgcPPfSQFi1apPj4eA0bNkzPPfecLl26pPvvv79T3x8REcGDAAAALxIdHa2hQ4fe0DkJWP/gm9/8ps6dO6f//M//lN1u15AhQ/TMM8%2BoT58%2Bni4NAAD4CALWFcyaNUuzZs3ydBkAAMBH%2BebLAgAAALyYddmyZcs8XcStICgoSKNHj1ZQUJCnS/FJ9K976F/30L/uoX/dQ/%2B6x1P9sxhffmMhAAAAdBtPEQIAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgucnGjRsVGxurwsJCl%2B1FRUVKTU1VQkKCMjIydOLECQ9V6F3Wrl2r2NhYl/%2B%2B%2Bc1vuoyhdx07c%2BaMFi5cqDFjxighIUH33nuvPvzwQ5cx9PDK0tPT293/YmNjlZeX5xxD766ura1NTz/9tCZOnKiEhARNmjRJ69atazeOHl7d%2BfPnVVBQoPT0dCUkJGjmzJk6dOiQyxj6d9m%2Bffv0ox/9SGlpaYqNjdXbb7/dbsy1etXU1KTly5drzJgxSkxMVGZmphwOh7mFGjBdZWWlkZ6ebvzbv/2bsXLlSuf2DRs2GKNGjTL%2B8Ic/GJ988onx4x//2Jg4caLx%2Beefe7Ba71BcXGzcc889hsPhMOx2u2G3241z584599O7jtXV1RkTJkwwFi9ebBw6dMj461//avzpT38yTp486RxDD6/u7Nmzzvud3W433n33XSM2NtZ47733DMOgd9eyfv16Y%2BzYsUZZWZnxt7/9zXjrrbeMxMRE4ze/%2BY1zDD3s2MMPP2zcc889xr59%2B4yTJ08axcXFRnJysnHmzBnDMOjfl5WVlRlPP/20sWvXLiM2NtbYvXu3y/7O9Co3N9eYMGGC8ec//9n48MMPjRkzZhgzZ840tU4ClskaGxuNb3zjG8a7775rfPe733UJWF//%2BteNzZs3O79uaGgwhg0bZrz%2B%2BuseqNS7FBcXG9OmTbvqfnrXsVWrVhmzZs3qcAw97Lz8/HzjG9/4hvNretexH/7wh0Z2drbLtgULFhgLFy50fk0Pr%2B7SpUtGXFycUVZW5rL9vvvuM55%2B%2BmnDMOjf1QwePLhdwLpWrxoaGoyhQ4cav//9751jjh49agwePNiorKw0rTaeIjTZihUrlJ6ernHjxrlsr66ult1u19ixY53bgoODlZCQoIqKihtdplc6fvy40tLSdPfdd%2BtnP/uZPv30U0n0rjPeeecdxcfH6%2BGHH1ZKSoruu%2B8%2Bbd%2B%2B3bmfHnZec3OzduzYoW9961uS6F1nJCYmqry8XMePH5ckffzxx9q/f7/%2B%2BZ//WRI9vJaWlha1traqR48eLtt79uyp999/n/5dh8706tChQ2ptbXU5T0dFRSkyMlIHDhwwrRZ/044Evf766/roo49UWlrabp/dbpfFYpHNZnPZHhYWJrvdfqNK9FoJCQn65S9/qbvuuku1tbUqLi7WrFmz9Nprr9G7TqiurtYLL7ygjIwM/fjHP9bBgweVn5%2BvgIAATZs2jR5eh127dqmxsVH33XefJB67nfGDH/xAjY2NmjJliqxWq9ra2vTII49o6tSpkujhtQQFBWnEiBFat26doqKiZLPZtGPHDlVUVOirX/0q/bsOnemVw%2BFQQECAgoODrzrGDAQsk5w%2BfVorV67U5s2bFRAQ4OlyfE5aWprz/2NiYjR8%2BHBNmDBBb7zxhqKiojxYmW9oa2vT8OHD9cgjj0iSYmNjdeTIEb344ouaNm2ah6vzLaWlpUpLS1N4eLinS/EZO3fu1GuvvaYnn3xSgwYN0kcffaSCggJFRERw/%2BukVatWafHixRo/frz8/f0VFxene%2B65p90LVeA7eIrQJB988IHOnj2r%2B%2B%2B/X0OHDtXQoUP13nvvaevWrYqPj5fNZpNhGO3SscPhaJe0IfXq1Ut33nmnTp48Se86ISIiQtHR0S7boqOjnU%2Bz0sPOOXXqlMrLy/Wd73zHuY3eXduqVas0d%2B5cTZkyRV/72td077336qGHHtLGjRsl0cPOGDBggH7zm9%2BooqJC//M//6Pf/va3am5u1oABA%2BjfdehMr2w2m5qbm9XY2HjVMWYgYJkkJSVFO3bs0CuvvKJXX31Vr776quLj43Xvvffq1VdfdT5I9u7d6/yexsZGVVZWKjEx0YOVe6fz58/r5MmTioiIoHedkJiYqGPHjrlsO3bsmCIjIyWJHnZSaWmpwsLCnNcOSfSuMy5evCir1eqyzc/PT21tbZLo4fXo2bOnbDab6urqtGfPHk2cOJH%2BXYfO9Co%2BPl5Wq1Xl5eXOMVVVVTp16pSp/eQpQpPcfvvtGjRokMu2wMBA3XHHHc6VhdmzZ2v9%2BvUaOHCg%2Bvfvr6KiIvXt21cTJ070RMle5fHHH1d6eroiIyN15swZFRcXy9/f3/leWPSuYw899JBmzpypDRs2aMqUKaqsrNT27duVn5/vHEMPO2YYhl5%2B%2BWXdf//98vNz/duT3nUsPT1d69evV9%2B%2BfTVo0CAdPnxYW7Zs0be//W3nGHrYsT179sgwDN111106ceKEVq1apejoaN1///2S6N%2BXXbhwQSdPnpRhGJIuX4P68ccfKzQ0VP369btmr4KDgzV9%2BnQVFhYqJCREQUFBys/PV1JSkoYPH25anQQsN7JYLC5fz507V5cuXVJubq4aGho0cuRIbdq0qd0rR25FZ86cUVZWlj777DP16dNHycnJ2rZtm3r37i2J3l3LsGHD9Ktf/UqrV6/WunXr9JWvfEXZ2dnOi4wlengt7777rj799FPnCe3L6F3HlixZoqKiIi1fvlxnz55VRESEZs6cqXnz5jnH0MOONTQ06Mknn9SZM2cUGhqqyZMn65FHHnGuDNK/v/vggw/0ve99TxaLRRaLRY8//rgkadq0aSosLOxUrxYvXiyr1arMzEw1NTUpLS1NS5cuNbVOi/FFBAQAAIApuAYLAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZP8P%2BswlxyyBIegAAAAASUVORK5CYII%3D"/>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12" id="common1233665439189543586">
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">70</td>
+        <td class="number">1210</td>
+        <td class="number">6.8%</td>
+        <td>
+            <div class="bar" style="width:18%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">72</td>
+        <td class="number">1196</td>
+        <td class="number">6.8%</td>
+        <td>
+            <div class="bar" style="width:17%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">71</td>
+        <td class="number">1157</td>
+        <td class="number">6.5%</td>
+        <td>
+            <div class="bar" style="width:17%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">69</td>
+        <td class="number">1133</td>
+        <td class="number">6.4%</td>
+        <td>
+            <div class="bar" style="width:17%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">68</td>
+        <td class="number">1083</td>
+        <td class="number">6.1%</td>
+        <td>
+            <div class="bar" style="width:16%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">73</td>
+        <td class="number">1062</td>
+        <td class="number">6.0%</td>
+        <td>
+            <div class="bar" style="width:16%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">67</td>
+        <td class="number">1054</td>
+        <td class="number">6.0%</td>
+        <td>
+            <div class="bar" style="width:15%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">74</td>
+        <td class="number">1010</td>
+        <td class="number">5.7%</td>
+        <td>
+            <div class="bar" style="width:15%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">66</td>
+        <td class="number">897</td>
+        <td class="number">5.1%</td>
+        <td>
+            <div class="bar" style="width:13%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">75</td>
+        <td class="number">874</td>
+        <td class="number">4.9%</td>
+        <td>
+            <div class="bar" style="width:13%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (38)</td>
+        <td class="number">7005</td>
+        <td class="number">39.6%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12"  id="extreme1233665439189543586">
+            <p class="h4">Minimum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">46</td>
+        <td class="number">2</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">48</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:50%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">49</td>
+        <td class="number">2</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">50</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:50%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">51</td>
+        <td class="number">2</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+            <p class="h4">Maximum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">90</td>
+        <td class="number">18</td>
+        <td class="number">0.1%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">91</td>
+        <td class="number">8</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:45%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">92</td>
+        <td class="number">10</td>
+        <td class="number">0.1%</td>
+        <td>
+            <div class="bar" style="width:56%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">93</td>
+        <td class="number">3</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:17%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">94</td>
+        <td class="number">4</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:23%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+    </div>
+</div>
+</div><div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_Preferred Position">Preferred Position<br/>
+            <small>Categorical</small>
+        </p>
+    </div><div class="col-md-3">
+    <table class="stats ">
+        <tr class="">
+            <th>Distinct count</th>
+            <td>15</td>
+        </tr>
+        <tr>
+            <th>Unique (%)</th>
+            <td>0.1%</td>
+        </tr>
+        <tr class="ignore">
+            <th>Missing (%)</th>
+            <td>0.0%</td>
+        </tr>
+        <tr class="ignore">
+            <th>Missing (n)</th>
+            <td>0</td>
+        </tr>
+    </table>
+</div>
+<div class="col-md-6 collapse in" id="minifreqtable4443093722712668047">
+    <table class="mini freq">
+        <tr class="">
+    <th>CB</th>
+    <td>
+        <div class="bar" style="width:25%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 15.0%">
+            2652
+        </div>
+        
+    </td>
+</tr><tr class="">
+    <th>ST</th>
+    <td>
+        <div class="bar" style="width:21%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 12.8%">
+            2255
+        </div>
+        
+    </td>
+</tr><tr class="">
+    <th>GK</th>
+    <td>
+        <div class="bar" style="width:19%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 11.2%">
+            &nbsp;
+        </div>
+        1982
+    </td>
+</tr><tr class="other">
+    <th>Other values (12)</th>
+    <td>
+        <div class="bar" style="width:100%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 61.0%">
+            10792
+        </div>
+        
+    </td>
+</tr>
+    </table>
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#freqtable4443093722712668047, #minifreqtable4443093722712668047"
+       aria-expanded="true" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="col-md-12 extrapadding collapse" id="freqtable4443093722712668047">
+    
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">CB</td>
+        <td class="number">2652</td>
+        <td class="number">15.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">ST</td>
+        <td class="number">2255</td>
+        <td class="number">12.8%</td>
+        <td>
+            <div class="bar" style="width:85%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">GK</td>
+        <td class="number">1982</td>
+        <td class="number">11.2%</td>
+        <td>
+            <div class="bar" style="width:74%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">CM</td>
+        <td class="number">1949</td>
+        <td class="number">11.0%</td>
+        <td>
+            <div class="bar" style="width:73%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">CDM</td>
+        <td class="number">1362</td>
+        <td class="number">7.7%</td>
+        <td>
+            <div class="bar" style="width:51%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">RM</td>
+        <td class="number">1324</td>
+        <td class="number">7.5%</td>
+        <td>
+            <div class="bar" style="width:50%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">LM</td>
+        <td class="number">1305</td>
+        <td class="number">7.4%</td>
+        <td>
+            <div class="bar" style="width:49%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">LB</td>
+        <td class="number">1291</td>
+        <td class="number">7.3%</td>
+        <td>
+            <div class="bar" style="width:49%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">RB</td>
+        <td class="number">1185</td>
+        <td class="number">6.7%</td>
+        <td>
+            <div class="bar" style="width:45%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">CAM</td>
+        <td class="number">1108</td>
+        <td class="number">6.3%</td>
+        <td>
+            <div class="bar" style="width:42%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (5)</td>
+        <td class="number">1268</td>
+        <td class="number">7.2%</td>
+        <td>
+            <div class="bar" style="width:48%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+</div>
+</div><div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_Primary Language">Primary Language<br/>
+            <small>Categorical</small>
+        </p>
+    </div><div class="col-md-3">
+    <table class="stats ">
+        <tr class="alert">
+            <th>Distinct count</th>
+            <td>58</td>
+        </tr>
+        <tr>
+            <th>Unique (%)</th>
+            <td>0.3%</td>
+        </tr>
+        <tr class="ignore">
+            <th>Missing (%)</th>
+            <td>0.0%</td>
+        </tr>
+        <tr class="ignore">
+            <th>Missing (n)</th>
+            <td>0</td>
+        </tr>
+    </table>
+</div>
+<div class="col-md-6 collapse in" id="minifreqtable-5696359806788243895">
+    <table class="mini freq">
+        <tr class="">
+    <th>Spanish</th>
+    <td>
+        <div class="bar" style="width:40%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 20.7%">
+            3657
+        </div>
+        
+    </td>
+</tr><tr class="">
+    <th>English</th>
+    <td>
+        <div class="bar" style="width:36%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 18.6%">
+            3281
+        </div>
+        
+    </td>
+</tr><tr class="">
+    <th>German</th>
+    <td>
+        <div class="bar" style="width:18%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 9.3%">
+            &nbsp;
+        </div>
+        1636
+    </td>
+</tr><tr class="other">
+    <th>Other values (55)</th>
+    <td>
+        <div class="bar" style="width:100%" data-toggle="tooltip" data-placement="right" data-html="true"
+             data-delay=500 title="Percentage: 51.5%">
+            9107
+        </div>
+        
+    </td>
+</tr>
+    </table>
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#freqtable-5696359806788243895, #minifreqtable-5696359806788243895"
+       aria-expanded="true" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="col-md-12 extrapadding collapse" id="freqtable-5696359806788243895">
+    
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">Spanish</td>
+        <td class="number">3657</td>
+        <td class="number">20.7%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">English</td>
+        <td class="number">3281</td>
+        <td class="number">18.6%</td>
+        <td>
+            <div class="bar" style="width:89%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">German</td>
+        <td class="number">1636</td>
+        <td class="number">9.3%</td>
+        <td>
+            <div class="bar" style="width:45%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">French</td>
+        <td class="number">1434</td>
+        <td class="number">8.1%</td>
+        <td>
+            <div class="bar" style="width:39%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Portuguese</td>
+        <td class="number">1222</td>
+        <td class="number">6.9%</td>
+        <td>
+            <div class="bar" style="width:34%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Italian</td>
+        <td class="number">798</td>
+        <td class="number">4.5%</td>
+        <td>
+            <div class="bar" style="width:22%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Dutch</td>
+        <td class="number">713</td>
+        <td class="number">4.0%</td>
+        <td>
+            <div class="bar" style="width:20%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Arabic</td>
+        <td class="number">561</td>
+        <td class="number">3.2%</td>
+        <td>
+            <div class="bar" style="width:16%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Japanese</td>
+        <td class="number">469</td>
+        <td class="number">2.7%</td>
+        <td>
+            <div class="bar" style="width:13%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">Irish</td>
+        <td class="number">417</td>
+        <td class="number">2.4%</td>
+        <td>
+            <div class="bar" style="width:12%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (48)</td>
+        <td class="number">3493</td>
+        <td class="number">19.8%</td>
+        <td>
+            <div class="bar" style="width:95%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+</div>
+</div><div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_Value">Value<br/>
+            <small>Numeric</small>
+        </p>
+    </div><div class="col-md-6">
+    <div class="row">
+        <div class="col-sm-6">
+            <table class="stats ">
+                <tr>
+                    <th>Distinct count</th>
+                    <td>207</td>
+                </tr>
+                <tr>
+                    <th>Unique (%)</th>
+                    <td>1.2%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (n)</th>
+                    <td>0</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (n)</th>
+                    <td>0</td>
+                </tr>
+            </table>
+
+        </div>
+        <div class="col-sm-6">
+            <table class="stats ">
+
+                <tr>
+                    <th>Mean</th>
+                    <td>2390700</td>
+                </tr>
+                <tr>
+                    <th>Minimum</th>
+                    <td>0</td>
+                </tr>
+                <tr>
+                    <th>Maximum</th>
+                    <td>123000000</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Zeros (%)</th>
+                    <td>0.0%</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="col-md-3 collapse in" id="minihistogram-2485326993927319438">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABLCAYAAAA1fMjoAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAABAVJREFUeJzt2z9Ia2cYx/FfNFLwz0UsMcYgOGiJzuImlDhEHdwkwa0gncRRDaiTg4iTXBG3biJCQcFisCoKpYhdRSmIiH%2BbRG2LWi7Xmg7l3l7r5TGWnhxz%2BX62wHN83%2BH9enI08WQymYxyLJlMam5uTtFoVJWVlbleHnnGzfPicSMQIF943Vr4h91T3f2ZfZtfBF4p8HmZgzsCHnMtkKnv9/Xz%2BU3W89983UQgyLkCtzcAvGQEAhgIBDAQCGAgEMBAIICBQAADgQAGAgEMBAIYCAQwEAhgIBDAQCCAgUAAA4EABgIBDAQCGAgEMBAIYCAQwEAggIFAAAOBAAYCAQwEAhgIBDAQCGAgEMBAIICBQAADgQAGAgEMBAIYCAQwEAhgIBDAQCCAgUAAA4EABgIBDAQCGAgEMHjd3kA2vAUeFRVId3d3WV%2BTyWQkSR6PJ%2BtrCgsLnzWPT58n8%2B4k5di3P%2B7r1z/eZjVbXuxV8rc3%2BuX3N1n//IZAqS5v3mZ9jf/VZ/rqyzoVFhZmvcZzeb3eZ0X%2BqfB68%2BL38Ee5svNkMqmTn75TNBpVZWWlG1twTT4fFrckk0nNzc25cl5ceQZJpVJ6/fq1UqmUG8sjz7h5XnhIBwwEAhgIBDAQCGBwJRCfz6fe3l75fD43lkeecfO8uPZ/ECAf8BYLMBAIYCAQwEAggIFAAAOBAAYCAQyOBnJ4eKhYLKZIJKKuri7t7%2B9/dG59fV3t7e2KRCLq6%2BvTzc2Nk9vCCzQ6OqpwOKxQKKS9vb0n5wcHBxUKhXR9fe3ovhwNZGRkRLFYTIlEQj09PRoYGHg0c3t7q6GhIU1PTyuRSMjn82lqasrJbeEFamtr0%2BzsrILB4JOzKysrKioqysm3Px0L5PLyUjs7O%2Brs7JQkRSIRnZ%2Bf6%2Bjo6MHc5uamGhsbVVtbK0nq7u7W0tKSU9vCC9XU1CS/36%2BnPtiRTqc1MzOjeDz%2B5Oz/wbFAzs7O5PP5VFDwzxKBQECnp6eP5qqrq9%2B/DgaDSqfTur%2B/d2pryGPDw8Pq7%2B9XcXFxTtbjIR15Y35%2BXsFgUM3NzTlb07FAAoGAUqnUgzvBv%2B8W7%2BZOTk7evz4%2BPn505wEkaWtrS6urq2ptbVU4HJYkdXZ2ZvVQ/185dgorKirU2NiohYUFSdLy8rKqqqpUU1PzYK6lpUW7u7s6ODiQJM3Ozqqjo8OpbSGPTUxMaH19Xaurq1pbW5MkLS4uKhQKObamox93Pzg4UDwe19XVlcrKyjQ2Nqa6ujpNTk7K7/crGo1K%2BvvPvOPj47q/v1d9fb3GxsZUWlrq1LbwAo2MjGhjY0MXFxcqLy9XSUmJEonEo7PyoYaGBm1vbzt6Vvg%2BCGDgjT5gIBDA8BffkCWvRTuawQAAAABJRU5ErkJggg%3D%3D">
+
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#descriptives-2485326993927319438,#minihistogram-2485326993927319438"
+       aria-expanded="false" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="row collapse col-md-12" id="descriptives-2485326993927319438">
+    <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation" class="active"><a href="#quantiles-2485326993927319438"
+                                                  aria-controls="quantiles-2485326993927319438" role="tab"
+                                                  data-toggle="tab">Statistics</a></li>
+        <li role="presentation"><a href="#histogram-2485326993927319438" aria-controls="histogram-2485326993927319438"
+                                   role="tab" data-toggle="tab">Histogram</a></li>
+        <li role="presentation"><a href="#common-2485326993927319438" aria-controls="common-2485326993927319438"
+                                   role="tab" data-toggle="tab">Common Values</a></li>
+        <li role="presentation"><a href="#extreme-2485326993927319438" aria-controls="extreme-2485326993927319438"
+                                   role="tab" data-toggle="tab">Extreme Values</a></li>
+
+    </ul>
+
+    <div class="tab-content">
+        <div role="tabpanel" class="tab-pane active row" id="quantiles-2485326993927319438">
+            <div class="col-md-4 col-md-offset-1">
+                <p class="h4">Quantile statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Minimum</th>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <th>5-th percentile</th>
+                        <td>100000</td>
+                    </tr>
+                    <tr>
+                        <th>Q1</th>
+                        <td>325000</td>
+                    </tr>
+                    <tr>
+                        <th>Median</th>
+                        <td>700000</td>
+                    </tr>
+                    <tr>
+                        <th>Q3</th>
+                        <td>2100000</td>
+                    </tr>
+                    <tr>
+                        <th>95-th percentile</th>
+                        <td>10000000</td>
+                    </tr>
+                    <tr>
+                        <th>Maximum</th>
+                        <td>123000000</td>
+                    </tr>
+                    <tr>
+                        <th>Range</th>
+                        <td>123000000</td>
+                    </tr>
+                    <tr>
+                        <th>Interquartile range</th>
+                        <td>1775000</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-4 col-md-offset-2">
+                <p class="h4">Descriptive statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Standard deviation</th>
+                        <td>5365700</td>
+                    </tr>
+                    <tr>
+                        <th>Coef of variation</th>
+                        <td>2.2444</td>
+                    </tr>
+                    <tr>
+                        <th>Kurtosis</th>
+                        <td>82.173</td>
+                    </tr>
+                    <tr>
+                        <th>Mean</th>
+                        <td>2390700</td>
+                    </tr>
+                    <tr>
+                        <th>MAD</th>
+                        <td>2690000</td>
+                    </tr>
+                    <tr class="">
+                        <th>Skewness</th>
+                        <td>7.1281</td>
+                    </tr>
+                    <tr>
+                        <th>Sum</th>
+                        <td>42269189950</td>
+                    </tr>
+                    <tr>
+                        <th>Variance</th>
+                        <td>28791000000000</td>
+                    </tr>
+                    <tr>
+                        <th>Memory size</th>
+                        <td>276.3 KiB</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-8 col-md-offset-2" id="histogram-2485326993927319438">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQCAYAAAByNR6YAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAAIABJREFUeJzs3X9clfXB//H3OQfoJhCmHJjS17bEKeIPBPyRBDYx56O53bd2W97qslzlnEPcbspSGKCImEWNaXWjZurGFnPqWsvWyppTb1yRgjpz3UkrNrXDAQci2YHD%2Bf7h7bm7drBJXodfvp6Pxx6u6/pwrs/1Vrnefs51Liwej8cjAAAAmMba1RMAAADobShYAAAAJqNgAQAAmIyCBQAAYDIKFgAAgMkoWAAAACajYAEAAJiMggUAAGAyChYAAIDJKFgAAAAmo2ABAACYjIIFAABgMgoWAACAyShYAAAAJqNgAQAAmIyCBQAAYDIKFgAAgMkoWAAAACajYAEAAJiMggUAAGAyChYAAIDJKFgAAAAmo2ABAACYjIIFAABgMgoWAACAyShYAAAAJqNgAQAAmIyCBQAAYDIKFgAAgMkoWAAAACajYAEAAJiMggUAAGAyChYAAIDJurxgVVRUaOHChUpNTVVsbKz27Nlj2N/c3KyVK1fq1ltvVXx8vKZNm6bnn3/eMMblcmnFihUaP368EhISlJGRobq6OsOYhoYGZWZmKikpSWPHjlVWVpaam5sNY06fPq0FCxZo9OjRuuWWW7R27Vq1tbVd9Tk6HA6tW7dODofjql%2BrtyATI/LwRSZG5OGLTIzIw1dXZtLlBau5uVnDhg1Tbm6uLBaLz/7CwkIdOHBARUVFevnll3XvvfcqPz9fb7zxhndMQUGB9u7dq3Xr1qm0tFQOh0OLFy82vE5mZqaqq6u1ZcsWlZSUqKKiQjk5Od79bW1tWrBggdxut8rKyrRmzRrt2rVLxcXFV32OtbW1Wr9%2BvWpra6/6tXoLMjEiD19kYkQevsjEiDx8dWUmXV6wJk6cqCVLlui2226Tx%2BPx2V9ZWanp06drzJgxio6O1p133qmhQ4fqyJEjkqSmpibt2LFDy5Yt07hx4xQXF6fVq1fr0KFD3jEnT57U/v37VVBQoJEjRyoxMVHZ2dnavXu3N/R9%2B/apurpajz32mIYOHarU1FQtWbJEP/vZz9Ta2tp5gQAAgB6vywvWP5OQkKDXX39dH330kSTp4MGD%2BuCDD5SSkiJJOnbsmNxutyZMmOD9mkGDBik6OlqHDx%2BWdLGkhYeHKy4uzjsmOTlZFotFVVVVkqSqqioNGTJE/fr1845JSUnRuXPn9N577/n9PAEAQO8R0NUT%2BGeys7OVk5OjW2%2B9VQEBAbJarcrPz1dSUpIkyel0KjAwUKGhoYavi4iIkNPp9I75dHGSJJvNpvDwcMOYiIgIwxi73S7p4hJjbGysX84PAAD0Pt2%2BYP3kJz9RVVWVSkpKNGDAAL311ltasWKFoqKiDKtW3YXD4fB5r/fkyZNdNBsAANDedTgyMlJRUVF%2BO2a3LliffPKJnnzyST311FO69dZbJUlDhgzRO%2B%2B8o82bN2vChAmy2%2B1qaWlRU1OTYRWrrq7OuwJlt9tVX19veG23262GhgbDmKNHjxrGXFrdioyMvOI5l5WVaf369T7bv/e972n48OFX/Dq93fDhw/XnP/%2B5q6fRbZCHLzIxIg9fZGJEHr6GDx%2BusWPH6qGHHvLZl56e7vOBODN164LV0tKi1tZW2Ww2w3ar1ep9fMKIESNks9lUXl6uKVOmSJKqq6t16tQpJSQkSJJGjx6txsZGHT9%2B3HsfVnl5uTwej%2BLj471jSkpKVF9f73078cCBA%2BrTp49iYmKueM6zZs1SWlqaz/bIyEg1Nn4st/vqH/vQG9hsVoWFBZPJ/yIPX2RiRB6%2ByMSIPHzZbFY98cQT7X6KsCOLJ59Hlxes5uZmffjhh95PENbU1OjEiRMKDw/XgAEDNHbsWD366KMKCgpSdHS03nzzTb3wwgtavny5JCk0NFQzZ85UYWGhwsLCFBISolWrVikxMVGjRo2SJMXExCglJUXZ2dnKy8tTS0uL8vPzNW3aNG/AKSkpiomJ0dKlS/Xggw%2BqtrZWxcXFmjt3rgIDA6/4fKKioi675Hj27Hm1tvKH/tPc7jYy%2BRTy8EUmRuThi0yMyMPos67L/mTxtPdshE705ptvat68eT7PwJo%2BfboKCwtVV1enoqIiHThwQA0NDYqOjtasWbN0zz33eMe6XC49%2Buij%2Bs1vfiOXy6XU1FTl5uYablpvbGzUypUr9cYbb8hqtWrq1KnKyspScHCwd8zp06eVl5enN998U8HBwZoxY4YyMzNltZrzYUsK1v8JCLCqb98QMvlf5OGLTIzIwxeZGJGHr0uZdIUuL1jXEv7Q/x%2B%2BERiRhy8yMSIPX2RiRB6%2BurJgdfvnYAEAAPQ0FCwAAACTUbAAAABMRsECAAAwGQULAADAZBQsAAAAk1GwAAAATEbBAgAAMBkFCwAAwGQULAAAAJNRsAAAAEwW0NUTuFYcfb9WFz5pUVs3/tGPFkn9w69XcCB/LAAAuBpcSTtJ4W9O6N0z57t6Gp8pKMCizfMTKFgAAFwl3iIEAAAwGQULAADAZBQsAAAAk1GwAAAATEbBAgAAMBkFCwAAwGQULAAAAJNRsAAAAExGwQIAADAZBQsAAMBkFCwAAACTUbAAAABM1uUFq6KiQgsXLlRqaqpiY2O1Z88enzEnT57Ud7/7XY0ZM0YJCQm68847debMGe9%2Bl8ulFStWaPz48UpISFBGRobq6uoMr9HQ0KDMzEwlJSVp7NixysrKUnNzs2HM6dOntWDBAo0ePVq33HKL1q5dq7a2Nv%2BcOAAA6LW6vGA1Nzdr2LBhys3NlcVi8dn/4Ycfas6cORo8eLB%2B%2BtOf6te//rUWLVqkoKAg75iCggLt3btX69atU2lpqRwOhxYvXmx4nczMTFVXV2vLli0qKSlRRUWFcnJyvPvb2tq0YMECud1ulZWVac2aNdq1a5eKi4v9d/IAAKBXCujqCUycOFETJ06UJHk8Hp/9P/rRj/TVr35VmZmZ3m0DBw70/v%2Bmpibt2LFDTz75pMaNGydJWr16tb7%2B9a/ryJEjGjVqlE6ePKn9%2B/dr586diouLkyRlZ2frO9/5jh5%2B%2BGFFRkZq3759qq6u1tatW9WvXz8NHTpUS5YsUVFRkRYvXqyAgC6PCgAA9BBdvoL1WTwej37/%2B9/rS1/6ku677z4lJyfrrrvu0muvveYdc%2BzYMbndbk2YMMG7bdCgQYqOjtbhw4clSZWVlQoPD/eWK0lKTk6WxWJRVVWVJKmqqkpDhgxRv379vGNSUlJ07tw5vffee/4%2BVQAA0It064JVV1en5uZmbdy4Ubfeeqs2b96s2267TYsXL1ZFRYUkyel0KjAwUKGhoYavjYiIkNPp9I75dHGSJJvNpvDwcMOYiIgIwxi73S5Jqq2t9cv5AQCA3qlbv%2B916Qbz2267TfPmzZMkxcbG6vDhw/r5z3%2BuMWPGdOX02uVwOHp0IbNaLAoI8H/vttmshl%2BvdeThi0yMyMMXmRiRhy%2BbzXrZ63JkZKSioqL8duxuXbD69u2rgIAAxcTEGLbHxMTo0KFDki6uMrW0tKipqcmwilVXV%2BddgbLb7aqvrze8htvtVkNDg2HM0aNHDWMurW5FRkZe8ZzLysq0fv16n%2B1J6Zuu%2BDW6UvD1QerbN6TTjhcWFtxpx%2BoJyMMXmRiRhy8yMSIPo61bN7V7XU5PT/f5QJyZunXBCgwM1IgRI/T%2B%2B%2B8btv/lL39RdHS0JGnEiBGy2WwqLy/XlClTJEnV1dU6deqUEhISJEmjR49WY2Ojjh8/7r0Pq7y8XB6PR/Hx8d4xJSUlqq%2Bv976deODAAfXp08en4H2WWbNmKS0tzWd7wev17Yzufj5uduns2fN%2BP47NZlVYWLAaGz%2BW282jMMjDF5kYkYcvMjEiD182m/Wy1%2BWOLJ58Hl1esJqbm/Xhhx96P0FYU1OjEydOKDw8XAMGDND999%2BvH/zgBxozZozGjx%2BvP/zhD/r973%2Bvn/zkJ5Kk0NBQzZw5U4WFhQoLC1NISIhWrVqlxMREjRo1StLFFa%2BUlBRlZ2crLy9PLS0tys/P17Rp07wBp6SkKCYmRkuXLtWDDz6o2tpaFRcXa%2B7cuQoMDLzi84mKimp/yfH1fVeZVOdo83jU2tp5fzHd7rZOPV53Rx6%2ByMSIPHyRiRF5GF32uuxnFk97z0boRG%2B%2B%2BabmzZvn8wys6dOnq7CwUJK0c%2BdOlZSU6KOPPtJNN92kjIwMTZo0yTvW5XLp0Ucf1W9%2B8xu5XC6lpqYqNzfXcNN6Y2OjVq5cqTfeeENWq1VTp05VVlaWgoP/byn19OnTysvL05tvvqng4GDNmDFDmZmZslqv/v3sOev26d0z/l8ZuhpBARZtnp%2BgiBD/Ly8HBFjVt2%2BIzp49zzcCkUd7yMSIPHyRiRF5%2BLqUSVfo8oJ1raBgGfGNwIg8fJGJEXn4IhMj8vDVlQWLjxoAAACYjIIFAABgMgoWAACAyShYAAAAJqNgAQAAmIyCBQAAYDIKFgAAgMkoWAAAACajYAEAAJiMggUAAGAyChYAAIDJKFgAAAAmo2ABAACYjIIFAABgMgoWAACAyShYAAAAJqNgAQAAmIyCBQAAYDIKFgAAgMkoWAAAACajYAEAAJiMggUAAGAyChYAAIDJKFgAAAAm6/KCVVFRoYULFyo1NVWxsbHas2fPZcfm5OQoNjZW27ZtM2x3uVxasWKFxo8fr4SEBGVkZKiurs4wpqGhQZmZmUpKStLYsWOVlZWl5uZmw5jTp09rwYIFGj16tG655RatXbtWbW1t5p0sAAC4JnR5wWpubtawYcOUm5sri8Vy2XGvvvqqjhw5oi9%2B8Ys%2B%2BwoKCrR3716tW7dOpaWlcjgcWrx4sWFMZmamqqurtWXLFpWUlKiiokI5OTne/W1tbVqwYIHcbrfKysq0Zs0a7dq1S8XFxeadLAAAuCZ0ecGaOHGilixZottuu00ej6fdMR999JEKCgpUVFQkm81m2NfU1KQdO3Zo2bJlGjdunOLi4rR69WodOnRIR44ckSSdPHlS%2B/fvV0FBgUaOHKnExERlZ2dr9%2B7dqq2tlSTt27dP1dXVeuyxxzR06FClpqZqyZIl%2BtnPfqbW1lb/hgAAAHqVLi9Y/4zH49HSpUt1//33KyYmxmf/sWPH5Ha7NWHCBO%2B2QYMGKTo6WocPH5YkVVZWKjw8XHFxcd4xycnJslgsqqqqkiRVVVVpyJAh6tevn3dMSkqKzp07p/fee89fpwcAAHqhbl%2BwNmzYoMDAQH3rW99qd7/T6VRgYKBCQ0MN2yMiIuR0Or1jPl2cJMlmsyk8PNwwJiIiwjDGbrdLkneVCwAA4EoEdPUEPsuxY8f0k5/8RLt27erqqVwxh8PRowuZ1WJRQID/e7fNZjX8eq0jD19kYkQevsjEiDx82WzWy16XIyMjFRUV5bdjd%2BuC9fbbb6u%2Bvl5f/epXvdvcbrfWrFmjrVu3as%2BePbLb7WppaVFTU5NhFauurs67AmW321VfX294bbfbrYaGBsOYo0ePGsZcWt2KjIy84jmXlZVp/fr1PtuT0jdd8Wt0peDrg9S3b0inHS8sLLjTjtUTkIcvMjEiD19kYkQeRlu3bmr3upyenu7zgTgzdeuCNX36dN1yyy2Gbd/%2B9rc1ffp03XHHHZKkESNGyGazqby8XFOmTJEkVVdX69SpU0pISJAkjR49Wo2NjTp%2B/Lj3Pqzy8nJ5PB7Fx8d7x5SUlKi%2Bvt77duKBAwfUp0%2Bfdu/9upxZs2YpLS3NZ3vB6/XtjO5%2BPm526ezZ834/js1mVVhYsBobP5bbzaMwyMMXmRiRhy8yMSIPXzab9bLX5Y4snnweXV6wmpub9eGHH3o/QVhTU6MTJ04oPDxcAwYMUHh4uGF8QECA7Ha7vvzlL0uSQkNDNXPmTBUWFiosLEwhISFatWqVEhMTNWrUKElSTEyMUlJSlJ2drby8PLW0tCg/P1/Tpk3zBpySkqKYmBgtXbpUDz74oGpra1VcXKy5c%2BcqMDDwis8nKiqq/SXH1/d9jnQ6X5vHo9bWzvuL6Xa3derxujvy8EUmRuThi0yMyMPostdlP%2BvygnXs2DHNmzdPFotFFotFjz76qKSLq1eFhYU%2B49t7Vtby5ctls9mUkZEhl8ul1NRU5ebmGsYUFRVp5cqVmj9/vqxWq6ZOnaqsrCzvfqvVqpKSEuXl5Wn27NkKDg7WjBkzlJGRYfIZAwCA3s7iudzDp2CqOev26d0z/n/r7WoEBVi0eX6CIkL8//59QIBVffuG6OzZ8/xLS%2BTRHjIxIg9fZGJEHr4uZdIV%2BKgBAACAyShYAAAAJqNgAQAAmIyCBQAAYDIKFgAAgMkoWAAAACajYAEAAJiMggUAAGAyChYAAIDJKFgAAAAmo2ABAACYjIIFAABgMgoWAACAyShYAAAAJqNgAQAAmIyCBQAAYDIKFgAAgMkoWAAAACajYAEAAJiMggUAAGAyChYAAIDJKFgAAAAmo2ABAACYjIIFAABgMgoWAACAybq8YFVUVGjhwoVKTU1VbGys9uzZ493X2tqqxx57TN/85jeVkJCg1NRUPfzww3I4HIbXcLlcWrFihcaPH6%2BEhARlZGSorq7OMKahoUGZmZlKSkrS2LFjlZWVpebmZsOY06dPa8GCBRo9erRuueUWrV27Vm1tbf47eQAA0Ct1ecFqbm7WsGHDlJubK4vFYth34cIFnThxQunp6dq1a5eeeuopvf/%2B%2B1q0aJFhXEFBgfbu3at169aptLRUDodDixcvNozJzMxUdXW1tmzZopKSElVUVCgnJ8e7v62tTQsWLJDb7VZZWZnWrFmjXbt2qbi42H8nDwAAeqWArp7AxIkTNXHiREmSx%2BMx7AsNDdWzzz5r2PbDH/5Qd911l86cOaP%2B/furqalJO3bs0JNPPqlx48ZJklavXq2vf/3rOnLkiEaNGqWTJ09q//792rlzp%2BLi4iRJ2dnZ%2Bs53vqOHH35YkZGR2rdvn6qrq7V161b169dPQ4cO1ZIlS1RUVKTFixcrIKDLowIAAD1El69gddS5c%2BdksVjUp08fSdKxY8fkdrs1YcIE75hBgwYpOjpahw8fliRVVlYqPDzcW64kKTk5WRaLRVVVVZKkqqoqDRkyRP369fOOSUlJ0blz5/Tee%2B91xqkBAIBeokcVLJfLpccff1zf%2BMY3FBISIklyOp0KDAxUaGioYWxERIScTqd3zKeLkyTZbDaFh4cbxkRERBjG2O12SVJtba1fzgcAAPROPeZ9r9bWVmVkZMhisSg3N7erp3NZDoejRxcyq8WigAD/926bzWr49VpHHr7IxIg8fJGJEXn4stmsl70uR0ZGKioqym/H7hEFq7W1VUuWLNGZM2e0detW7%2BqVdHGVqaWlRU1NTYZVrLq6Ou8KlN1uV319veE13W63GhoaDGOOHj1qGHNpdSsyMvKK51pWVqb169f7bE9K33TFr9GVgq8PUt%2B%2BIf98oEnCwoI77Vg9AXn4IhMj8vBFJkbkYbR166Z2r8vp6ek%2BH4gzU7cvWJfKVU1NjbZt26bw8HDD/hEjRshms6m8vFxTpkyRJFVXV%2BvUqVNKSEiQJI0ePVqNjY06fvy49z6s8vJyeTwexcfHe8eUlJSovr7e%2B3bigQMH1KdPH8XExFzxfGfNmqW0tDSf7QWv17czuvv5uNmls2fP%2B/04NptVYWHBamz8WG43j8IgD19kYkQevsjEiDx82WzWy16XO7J48nl0ecFqbm7Whx9%2B6P0EYU1NjU6cOKHw8HBFRkZq8eLFOnHihP7rv/5Lra2t3lWl8PBw771XM2fOVGFhocLCwhQSEqJVq1YpMTFRo0aNkiTFxMQoJSVF2dnZysvLU0tLi/Lz8zVt2jRvwCkpKYqJidHSpUv14IMPqra2VsXFxZo7d64CAwOv%2BHyioqLaX3J8fd9VJtU52jwetbZ23l9Mt7utU4/X3ZGHLzIxIg9fZGJEHkaXvS77WZcXrGPHjmnevHmyWCyyWCx69NFHJUnTp09Xenq63njjDVksFk2fPl3SxUc5WCwWbdu2TWPHjpUkLV%2B%2BXDabTRkZGXK5XEpNTfW5T6uoqEgrV67U/PnzZbVaNXXqVGVlZXn3W61WlZSUKC8vT7Nnz1ZwcLBmzJihjIyMTkoCAAD0FhbPPz58Cn4xZ90%2BvXvG/2%2B9XY2gAIs2z09QRIj/378PCLCqb98QnT17nn9piTzaQyZG5OGLTIzIw9elTLoCHzUAAAAwGQULAADAZBQsAAAAk1GwAAAATEbBAgAAMBkFCwAAwGQULAAAAJNRsAAAAExGwQIAADAZBQsAAMBkHS5YTU1N/pgHAABAr9HhgpWSkqJHHnlEb731lj/mAwAA0ON1uGBlZmbqz3/%2Bs%2B6%2B%2B2597WtfU0lJiT766CN/zA0AAKBH6nDBuvvuu7Vr1y7t3LlTEydO1HPPPae0tDQtWLBAr776qlpbW/0xTwAAgB7jc9/kHhcXp%2BzsbO3bt0%2BPP/64GhsblZGRoYkTJ%2BrRRx9VTU2NmfMEAADoMa7qU4Qej0fl5eX67W9/qz/96U/q16%2BfJk2apN/%2B9re6/fbb9ctf/tKseQIAAPQYAZ/ni2pqarRjxw796le/ksPhUHJysoqKipSWlqaAgAC1tbXpscce05NPPqmZM2eaPWcAAIBurcMF6%2B6779bbb7%2BtyMhI/fu//7tmzpyp6Ohowxir1arbb79dzz33nGkTBQAA6Ck6XLD69Omjp59%2BWhMnTpTVevl3GGNjY/W73/3uqiYHAADQE3W4YD399NNXNC4oKEg33nhjhycEAADQ03X4JveXX35Zmzdvbnffc889p1deeeWqJwUAANCTdbhglZSUyGaztbsvMDBQJSUlVz0pAACAnqzDBeuDDz7QkCFD2t03ePBgvf/%2B%2B1c9KQAAgJ6swwUrMDBQ9fX17e5zOp2XXd0CAAC4VnS4YI0ZM0YbN27UhQsXDNsvXLigZ599VmPHju3Q61VUVGjhwoVKTU1VbGys9uzZ4zOmuLhYKSkpio%2BP1/z58/XBBx8Y9rtcLq1YsULjx49XQkKCMjIyVFdXZxjT0NCgzMxMJSUlaezYscrKylJzc7NhzOnTp7VgwQKNHj1at9xyi9auXau2trYOnQ8AAECHC9Z//ud/qqamRrfddpsKCgq0ceNGFRQUaMqUKaqpqVFmZmaHXq%2B5uVnDhg1Tbm6uLBaLz/4NGzaotLRU%2Bfn52r59u4KDg3XffffJ5XJ5xxQUFGjv3r1at26dSktL5XA4tHjxYsPrZGZmqrq6Wlu2bFFJSYkqKiqUk5Pj3d/W1qYFCxbI7XarrKxMa9as0a5du1RcXNzBhAAAwLWuwwVr8ODB%2BuUvf6kxY8boxRdf1BNPPKEXX3xRY8eO1S9%2B8QsNHjy4Q683ceJELVmyRLfddps8Ho/P/m3btmnRokWaNGmShgwZorVr18rhcOi1116TJDU1NWnHjh1atmyZxo0bp7i4OK1evVqHDh3SkSNHJEknT57U/v37VVBQoJEjRyoxMVHZ2dnavXu3amtrJUn79u1TdXW1HnvsMQ0dOlSpqalasmSJfvazn/EDrAEAQId8rp9FeNNNN%2BlHP/qRDh48qHfeeUcHDx7UE088oUGDBpk6uZqaGjmdTt18883ebaGhoYqPj1dlZaUk6ejRo3K73ZowYYJ3zKBBgxQdHa3Dhw9LkiorKxUeHq64uDjvmOTkZFksFlVVVUmSqqqqNGTIEPXr1887JiUlRefOndN7771n6nkBAIDe7ap%2B2LO/OZ1OWSwW2e12w/aIiAg5nU5JUl1dnQIDAxUaGnrZMU6n01CcJMlmsyk8PNwwJiIiwjDm0nEvrXIBAABciQ4/yd3j8WjHjh165ZVXdObMGcO9UJdcyw8bdTgcPbqQWS0WBQT4v3fbbFbDr9c68vBFJkbk4YtMjMjDl81mvex1OTIyUlFRUX47docLVlFRkTZt2qTExEQlJCQoMDDQH/OSdHEFyePxyOl0Glax6urqNGzYMO%2BYlpYWNTU1GVax6urqvF9jt9t9Hi3hdrvV0NBgGHP06FHDmEurW5GRkVc857KyMq1fv95ne1L6pit%2Bja4UfH2Q%2BvYN6bTjhYUFd9qxegLy8EUmRuThi0yMyMNo69ZN7V6X09PTfT4QZ6YOF6xf/epXSk9PV3p6uj/mYzBw4EDZ7XYdPHhQsbGxki7e1F5VVaU5c%2BZIkkaMGCGbzaby8nJNmTJFklRdXa1Tp04pISFBkjR69Gg1Njbq%2BPHj3vuwysvL5fF4FB8f7x1TUlKi%2Bvp679uJBw4cUJ8%2BfRQTE3PFc541a5bS0tJ8the83v6zw7qbj5tdOnv2vN%2BPY7NZFRYWrMbGj%2BV28ygM8vBFJkbk4YtMjMjDl81mvex1uSOLJ59HhwvWJ598oqSkJNMm0NzcrA8//ND7CcKamhqdOHFC4eHhGjBggO655x4988wzuvHGG3XDDTeouLhY/fv31%2BTJkyVdvOl95syZKiwsVFhYmEJCQrRq1SolJiZq1KhRkqSYmBilpKQoOztbeXl5amlpUX5%2BvqZNm%2BYNOCUlRTExMVq6dKkefPBB1dbWqri4WHPnzu3QKl1UVFT7S46v77vKpDpHm8ej1tbO%2B4vpdrd16vG6O/LwRSZG5OGLTIzIw%2Biy12U/63DB%2BsY3vqG9e/caPrV3NY4dO6Z58%2BbJYrHIYrHo0UcflSRNnz5dhYWFeuCBB3ThwgXl5OTo3Llz3gedBgUFeV9j%2BfLlstlsysjIkMvlUmpqqnJzcw3HKSoq0sqVKzV//nxZrVZNnTpVWVlZ3v1Wq1UlJSXKy8vT7NmzFRwcrBkzZigjI8OU8wQAANcOi6e9h099hpdeeklPPPGEEhMTdcstt6hPnz4%2BYy6tLuH/zFm3T%2B%2Be8f9bb1cjKMCizfMTFBHi//fvAwKs6ts3RGfPnudfWiKP9pCJEXn4IhMj8vB1KZMuOXZHv%2BDSk9r/9re/6cUXX/TZb7FY9M4771z9zAAAAHq6waZTAAAgAElEQVSoDhes3/3ud/6YBwAAQK/R4YJ14403%2BmMeAAAAvUaHC9Yl//3f/62jR4/q9OnT%2Bs53vqMBAwbo7bff1sCBA7vkbn0AAIDuosMFq76%2BXosXL9ahQ4cUGRmp2tpa3XnnnRowYIDKysoUGhqqnJwcf8wVAACgR%2Bjw8/RXr14th8OhF154Qa%2B//ro%2B/SHE5ORklZeXmzpBAACAnqbDBWvv3r36wQ9%2BoCFDhshisRj2RUdH68yZM6ZNDgAAoCfqcMFqbW1VSEj7z5RobGxUQMDnvq0LAACgV%2BhwwRo5cqR27tzZ7r6XX35ZiYmJVz0pAACAnqzDy01LlizRvffeq3nz5mnq1KmyWCx644039Oyzz%2Bq1115TaWmpP%2BYJAADQY3R4BSspKUnPPfecXC6XVq1aJY/Ho6eeekp//etftXnzZo0cOdIf8wQAAOgxPtcNU2PGjNHzzz%2Bv5uZm/f3vf1dYWJhCQ0PNnhsAAECPdFV3pF9//fW6/vrrzZoLAABAr9DhgvXDH/7wn47Jz8//XJMBAADoDTpcsCorK322NTQ0qLa2Vl/4whdkt9tNmRgAAEBP1eGC9eKLL7a7/d1339VDDz2k7Ozsq54UAABAT9bhTxFezpAhQ3T//feroKDArJcEAADokUwrWJIUFhamDz74wMyXBAAA6HE6/BZhU1OTzzaXy6Xq6moVFxdr8ODBpkwMAACgp%2BpwwRozZozPD3mWJI/Ho6ioKD399NOmTAwAAKCn6nDBau8RDNddd5369%2B%2BvhIQEBQYGmjIxAACAnqrDBevOO%2B/0xzwAAAB6DVNvcgcAAMDnWMEaPnx4u/dgXc6xY8c6eggAAIAercMFa8mSJSotLZXNZlNaWprsdrucTqf27Nkjj8ejuXPnymaz%2BWOuAAAAPUKHC9a5c%2BcUGxurp59%2B2lCkli1bpu9%2B97v6%2B9//roceesi0Cba1tenHP/6xXnzxRTmdTkVFRWnGjBlatGiRYVxxcbG2b9%2Buc%2BfOKTExUXl5efrSl77k3e9yuVRYWKjdu3fL5XIpNTVVubm5ioiI8I5paGjQypUr9fvf/15Wq1Vf%2B9rXlJWVxQ%2B0BgAAHdLhe7B27tzZ7iqVzWbT3LlztXPnTtMmJ0kbNmxQWVmZcnNz9fLLL%2Buhhx7Spk2b9NOf/tQwprS0VPn5%2Bdq%2BfbuCg4N13333yeVyeccUFBRo7969WrdunUpLS%2BVwOLR48WLDsTIzM1VdXa0tW7aopKREFRUVysnJMfV8AABA79fhgtXc3KzTp0%2B3u%2B/06dP65JNPrnpSn1ZZWanJkydr4sSJio6O1te%2B9jWlpKToyJEj3jHbtm3TokWLNGnSJA0ZMkRr166Vw%2BHQa6%2B9Juniw1F37NihZcuWady4cYqLi9Pq1at16NAh7%2BucPHlS%2B/fvV0FBgUaOHKnExERlZ2dr9%2B7dqq2tNfWcAABA79bhgjV58mQ9/vjj%2BvWvf63m5mZJF0vXCy%2B8oKKiIqWlpZk6wYSEBJWXl%2Bsvf/mLJOnEiRM6dOiQbr31VklSTU2NnE6nbr75Zu/XhIaGKj4%2BXpWVlZKko0ePyu12a8KECd4xgwYNUnR0tA4fPizpYpELDw9XXFycd0xycrIsFouqqqpMPScAANC7dfgerNzcXD388MNaunSpLBaLrrvuOn3yySfyeDyaNGmScnNzTZ3gggUL1NTUpNtvv102m01tbW36/ve/r2nTpkmSnE6nLBaL7Ha74esiIiLkdDolSXV1dQoMDFRoaOhlxzidTvXr18%2Bw32azKTw83DsGAADgSnS4YPXp00dPP/20/vznP%2BvIkSNyOp2KjIzUyJEjNXToUNMnuHv3bv3mN7/RE088ocGDB%2Budd95RQUGBoqKiNH36dNOPd7UcDkePfkvRarEoIMD/j0ez2ayGX6915OGLTIzIwxeZGJGHL5vNetnrcmRkpKKiovx27A4XrEuGDh3ql0L1jx577DEtWLBAt99%2BuyTpK1/5iv72t79pw4YNmj59uux2uzwej5xOp2EVq66uTsOGDZMk2e12tbS0qKmpybCKVVdX5/0au92u%2Bvp6w7HdbrcaGhp8Vsc%2BS1lZmdavX%2B%2BzPSl905WfdBcKvj5IffuGdNrxwsKCO%2B1YPQF5%2BCITI/LwRSZG5GG0deumdq/L6enpPh92M9PnKlitra3atWuXjh49qtOnTys7O1tf%2BtKX9Nvf/lZDhgzRoEGDTJvgxx9/7POJRavVqra2NknSwIEDZbfbdfDgQcXGxkq6eFN7VVWV5syZI0kaMWKEbDabysvLNWXKFElSdXW1Tp06pYSEBEnS6NGj1djYqOPHj3vvwyovL5fH41F8fPwVz3fWrFnt3odW8Hp9O6O7n4%2BbXTp79rzfj2OzWRUWFqzGxo/ldrf5/XjdHXn4IhMj8vBFJkbk4ctms172uhwZGenXY3e4YNXU1Ojb3/62nE6nhg4dqqqqKjU1NUm6WEj27t2rwsJC0yaYlpamZ555Rv3799fgwYN1/PhxbdmyxfAzEe%2B55x4988wzuvHGG3XDDTeouLhY/fv31%2BTJkyVdvOl95syZKiwsVFhYmEJCQrRq1SolJiZq1KhRkqSYmBilpKQoOztbeXl5amlpUX5%2BvqZNm9ah34SoqKj2lxxf33d1QXSSNo9Hra2d9xfT7W7r1ON1d%2BThi0yMyMMXmRiRh9Flr8t%2B1uGCVVBQoLCwMD3//PMKDw/XiBEjvPvGjx%2BvJ5980tQJ/vCHP1RxcbFWrFih%2Bvp6RUVFafbs2YYHjT7wwAO6cOGCcnJydO7cOY0ZM0YbN25UUFCQd8zy5ctls9mUkZFheNDopxUVFWnlypWaP3%2B%2BrFarpk6dqqysLFPPBwAA9H4Wj8fj6cgXJCQk6PHHH9fkyZPldrs1fPhw7dixQ8OHD9dbb72l%2B%2B%2B/n8catGPOun1694z/33q7GkEBFm2en6CIEP%2B/fx8QYFXfviE6e/Y8/9ISebSHTIzIwxeZGJGHr0uZdIUOf9TAarXqcp3M6XTyY2UAAMA1r8MFa%2BzYsdq2bZtaW1u92ywWiyTpl7/8peGBnwAAANeiDt%2BDlZmZqdmzZ2vatGm67bbbZLFY9Pzzz%2Bvdd99VdXW1fvGLX/hjngAAAD1Gh1ewvvKVr2jHjh0aMWKE9wc7v/LKKxowYIB%2B8Ytf6Mtf/rLZcwQAAOhROrSC5fF4dP78eUVHR6uoqMhfcwIAAOjROrSC1dLSonHjxmn//v3%2Bmg8AAECP16GCFRQUpC9%2B8YuX/RQhAAAAPsc9WLNnz9aWLVvkcrn8MR8AAIAer8OfInQ6naqurtakSZN08803KyIiwvuYBuniIxseeeQRUycJAADQk3S4YL3yyiveH75cUVHhs5%2BCBQAArnUdLlh79%2B71xzwAAAB6jSu6B%2Bub3/ym3n33XcO2F198UY2NjX6ZFAAAQE92RQXrf/7nf3ThwgXvf7vdbi1dulQ1NTV%2BmxgAAEBP1eFPEV7CoxoAAADa97kLFgAAANp3VQXr049nAAAAwEVX/CnCe%2B65x6dQzZ0712ebxWLR22%2B/bc7sAAAAeqArKljp6en%2BngcAAECvQcECAAAwGTe5AwAAmIyCBQAAYDIKFgAAgMkoWAAAACajYAEAAJisRxSsjz76SA899JDGjx%2Bv%2BPh4/eu//qv%2B9Kc/GcYUFxcrJSVF8fHxmj9/vj744APDfpfLpRUrVmj8%2BPFKSEhQRkaG6urqDGMaGhqUmZmppKQkjR07VllZWWpubvb7%2BQEAgN6l2xesxsZGzZ49W0FBQXr22We1e/duPfLIIwoLC/OO2bBhg0pLS5Wfn6/t27crODhY9913n1wul3dMQUGB9u7dq3Xr1qm0tFQOh0OLFy82HCszM1PV1dXasmWLSkpKVFFRoZycnE47VwAA0Dt0%2B4K1YcMGRUdHq6CgQCNGjNANN9yg5ORkDRw40Dtm27ZtWrRokSZNmqQhQ4Zo7dq1cjgceu211yRJTU1N2rFjh5YtW6Zx48YpLi5Oq1ev1qFDh3TkyBFJ0smTJ7V//34VFBRo5MiRSkxMVHZ2tnbv3q3a2touOXcAANAzdfuC9cYbb2jEiBFasmSJkpOTNWPGDG3fvt27v6amRk6nUzfffLN3W2hoqOLj41VZWSlJOnr0qNxutyZMmOAdM2jQIEVHR%2Bvw4cOSpMrKSoWHhysuLs47Jjk5WRaLRVVVVf4%2BTQAA0It0%2B4JVU1Ojn//857rpppu0efNmzZ49W6tWrdKvfvUrSZLT6ZTFYpHdbjd8XUREhJxOpySprq5OgYGBCg0NvewYp9Opfv36GfbbbDaFh4d7xwAAAFyJK/5hz12lra1No0aN0ve//31JUmxsrN599109//zzmj59ehfPzpfD4ejRbylaLRYFBPi/d9tsVsOv1zry8EUmRuThi0yMyMOXzWa97HU5MjJSUVFRfjt2ty9YUVFRiomJMWyLiYnRq6%2B%2BKkmy2%2B3yeDxyOp2GVay6ujoNGzbMO6alpUVNTU2GVay6ujrv19jtdtXX1xuO43a71dDQ4LM69lnKysq0fv16n%2B1J6Zuu%2BDW6UvD1QerbN6TTjhcWFtxpx%2BoJyMMXmRiRhy8yMSIPo61bN7V7XU5PT/f5sJuZun3BSkhI0Pvvv2/Y9v777ys6OlqSNHDgQNntdh08eFCxsbGSLt7UXlVVpTlz5kiSRowYIZvNpvLyck2ZMkWSVF1drVOnTikhIUGSNHr0aDU2Nur48ePe%2B7DKy8vl8XgUHx9/xfOdNWuW0tLSfLYXvF7fzuju5%2BNml86ePe/349hsVoWFBaux8WO53W1%2BP153Rx6%2ByMSIPHyRiRF5%2BLLZrJe9LkdGRvr12N2%2BYN17772aPXu2SkpKdPvtt6uqqkrbt2/XqlWrvGPuuecePfPMM7rxxht1ww03qLi4WP3799fkyZMlXbzpfebMmSosLFRYWJhCQkK0atUqJSYmatSoUZIuroqlpKQoOztbeXl5amlpUX5%2BvqZNm9ah34SoqKj2lxxf33d1QXSSNo9Hra2d9xfT7W7r1ON1d%2BThi0yMyMMXmRiRh9Flr8t%2B1u0L1siRI/XUU0/p8ccf19NPP63/9//%2Bn7KysjRt2jTvmAceeEAXLlxQTk6Ozp07pzFjxmjjxo0KCgryjlm%2BfLlsNpsyMjLkcrmUmpqq3Nxcw7GKioq0cuVKzZ8/X1arVVOnTlVWVlannSsAAOgdLB6Px9PVk7gWzFm3T%2B%2Be8f9bb1cjKMCizfMTFBHi//fvAwKs6ts3RGfPnudfWiKP9pCJEXn4IhMj8vB1KZOuwEcNAAAATEbBAgAAMBkFCwAAwGQULAAAAJNRsAAAAExGwQIAADAZBQsAAMBkFCwAAACTUbAAAABMRsECAAAwGQULAADAZBQsAAAAk1GwAAAATEbBAgAAMBkFCwAAwGQULAAAAJNRsAAAAExGwQIAADAZBQsAAMBkFCwAAACTUbAAAABMRsECAAAwGQULAADAZBQsAAAAk1GwAAAATNbjCtaGDRsUGxurwsJCw/bi4mKlpKQoPj5e8%2BfP1wcffGDY73K5tGLFCo0fP14JCQnKyMhQXV2dYUxDQ4MyMzOVlJSksWPHKisrS83NzX4/JwAA0Lv0qIJ15MgRlZWVKTY21rB9w4YNKi0tVX5%2BvrZv367g4GDdd999crlc3jEFBQXau3ev1q1bp9LSUjkcDi1evNjwOpmZmaqurtaWLVtUUlKiiooK5eTkdMq5AQCA3qPHFKzz58/roYce0qpVq9SnTx/Dvm3btmnRokWaNGmShgwZorVr18rhcOi1116TJDU1NWnHjh1atmyZxo0bp7i4OK1evVqHDh3SkSNHJEknT57U/v37VVBQoJEjRyoxMVHZ2dnavXu3amtrO/18AQBAz9VjCtbKlSuVlpamCRMmGLbX1NTI6XTq5ptv9m4LDQ1VfHy8KisrJUlHjx6V2%2B02fO2gQYMUHR2tw4cPS5IqKysVHh6uuLg475jk5GRZLBZVVVX589QAAEAvE9DVE7gSL730kt555x3t2LHDZ5/T6ZTFYpHdbjdsj4iIkNPplCTV1dUpMDBQoaGhlx3jdDrVr18/w36bzabw8HDvGAAAgCvR7QvWmTNntHr1aj333HMKDAzs6un8Uw6Ho0e/pWi1WBQQ4P%2BFTZvNavj1WkcevsjEiDx8kYkRefiy2ayXvS5HRkYqKirKb8fu9gXr2LFjqq%2Bv1x133CGPxyNJcrvdqqioUGlpqV5%2B%2BWV5PB45nU7DKlZdXZ2GDRsmSbLb7WppaVFTU5NhFauurs77NXa7XfX19YZju91uNTQ0%2BKyOfZaysjKtX7/eZ3tS%2BqYrP%2BkuFHx9kPr2Dem044WFBXfasXoC8vBFJkbk4YtMjMjDaOvWTe1el9PT030%2B7Gambl%2BwkpOT9eKLLxq2PfLII4qJidGCBQs0cOBA2e12HTx40PvpwqamJlVVVWnOnDmSpBEjRshms6m8vFxTpkyRJFVXV%2BvUqVNKSEiQJI0ePVqNjY06fvy49z6s8vJyeTwexcfHX/F8Z82apbS0NJ/tBa/XtzO6%2B/m42aWzZ8/7/Tg2m1VhYcFqbPxYbneb34/X3ZGHLzIxIg9fZGJEHr5sNutlr8uRkZF%2BPXa3L1jXX3%2B9Bg8ebNgWHBysL3zhC4qJiZEk3XPPPXrmmWd044036oYbblBxcbH69%2B%2BvyZMnS7p40/vMmTNVWFiosLAwhYSEaNWqVUpMTNSoUaMkSTExMUpJSVF2drby8vLU0tKi/Px8TZs2rUO/CVFRUe0vOb6%2B73Mm0LnaPB61tnbeX0y3u61Tj9fdkYcvMjEiD19kYkQeRpe9LvtZty9Y7bFYLIb/fuCBB3ThwgXl5OTo3LlzGjNmjDZu3KigoCDvmOXLl8tmsykjI0Mul0upqanKzc01vE5RUZFWrlyp%2BfPny2q1aurUqcrKyuqUcwIAAL2HxXPpxib41Zx1%2B/TuGf%2B/9XY1ggIs2jw/QREh/n//PiDAqr59Q3T27Hn%2BpSXyaA%2BZGJGHLzIxIg9flzLpCnzUAAAAwGQULAAAAJNRsAAAAExGwQIAADAZBQsAAMBkFCwAAACTUbAAAABMRsECAAAwGQULAADAZBQsAAAAk1GwAAAATEbBAgAAMBkFCwAAwGQULAAAAJNRsAAAAExGwQIAADAZBQsAAMBkFCwAAACTUbAAAABMRsECAAAwGQULAADAZBQsAAAAk1GwAAAATEbBAgAAMFm3L1glJSWaOXOmEhMTlZycrO9973t6//33fcYVFxcrJSVF8fHxmj9/vj744APDfpfLpRUrVmj8%2BPFKSEhQRkaG6urqDGMaGhqUmZmppKQkjR07VllZWWpubvbr%2BQEAgN6n2xesiooKfetb39L27dv13HPPqbW1Vffdd58uXLjgHbNhwwaVlpYqPz9f27dvV3BwsO677z65XC7vmIKCAu3du1fr1q1TaWmpHA6HFi9ebDhWZmamqqurtWXLFpWUlKiiokI5OTmddq4AAKB36PYFa%2BPGjZo%2BfbpiYmI0dOhQFRYW6tSpUzp27Jh3zLZt27Ro0SJNmjRJQ4YM0dq1a%2BVwOPTaa69JkpqamrRjxw4tW7ZM48aNU1xcnFavXq1Dhw7pyJEjkqSTJ09q//79Kigo0MiRI5WYmKjs7Gzt3r1btbW1XXLuAACgZ%2Br2BesfnTt3ThaLRV/4whckSTU1NXI6nbr55pu9Y0JDQxUfH6/KykpJ0tGjR%2BV2uzVhwgTvmEGDBik6OlqHDx%2BWJFVWVio8PFxxcXHeMcnJybJYLKqqquqMUwMAAL1EjypYHo9Hq1evVlJSkgYPHixJcjqdslgsstvthrERERFyOp2SpLq6OgUGBio0NPSyY5xOp/r162fYb7PZFB4e7h0DAABwJQK6egIdkZeXp/fee08///nPu3oql%2BVwOHr0W4pWi0UBAf7v3Tab1fDrtY48fJGJEXn4IhMj8vBls1kve12OjIxUVFSU347dYwrWypUr9Yc//EGlpaWGQOx2uzwej5xOp2EVq66uTsOGDfOOaWlpUVNTk2EVq66uzvs1drtd9fX1hmO63W41NDT4rI59lrKyMq1fv95ne1L6pit%2Bja4UfH2Q%2BvYN6bTjhYUFd9qxegLy8EUmRuThi0yMyMNo69ZN7V6X09PTfT7sZqYeUbBWrlypPXv26Kc//amio6MN%2BwYOHCi73a6DBw8qNjZW0sWb2quqqjRnzhxJ0ogRI2Sz2VReXq4pU6ZIkqqrq3Xq1CklJCRIkkaPHq3GxkYdP37cex9WeXm5PB6P4uPjr3ius2bNUlpams/2gtfr2xnd/Xzc7NLZs%2Bf9fhybzaqwsGA1Nn4st7vN78fr7sjDF5kYkYcvMjEiD182m/Wy1%2BXIyEi/HrvbF6y8vDy99NJLeuaZZxQcHOy9H6pPnz667rrrJEn33HOPnnnmGd1444264YYbVFxcrP79%2B2vy5MmSLt70PnPmTBUWFiosLEwhISFatWqVEhMTNWrUKElSTEyMUlJSlJ2drby8PLW0tCg/P1/Tpk3r0G9CVFRU%2B0uOr%2B%2B7yiQ6R5vHo9bWzvuL6Xa3derxujvy8EUmRuThi0yMyMPostdlP%2Bv2Bev555%2BXxWLR3XffbdheWFio6dOnS5IeeOABXbhwQTk5OTp37pzGjBmjjRs3KigoyDt%2B%2BfLlstlsysjIkMvlUmpqqnJzcw2vWVRUpJUrV2r%2B/PmyWq2aOnWqsrKy/H%2BSAACgV7F4PB5PV0/iWjBn3T69e8b/b71djaAAizbPT1BEiP/fvw8IsKpv3xCdPXuef2mJPNpDJkbk4YtMjMjD16VMugIfNQAAADAZBQsAAMBkFCwAAACTUbAAAABMRsECAAAwGQULAADAZBQsAAAAk1GwAAAATEbBAgAAMBkFCwAAwGQULAAAAJNRsAAAAExGwQIAADAZBQsAAMBkFCwAAACTUbAAAABMRsECAAAwGQULAADAZBQsAAAAk1GwAAAATEbBAgAAMBkFCwAAwGQBXT0BdB8BVosCbBZJnk44WptaW1sltV3F8SwmzgcAAPNQsOB1U%2BT12rzvA/2l7uOunspn%2BnJEsH4wZUhXTwMAgMuiYMHgL3Uf690z57t6GgAA9Gjcg9WO0tJSpaWladSoUbrrrrt05MiRrp4SAADoQShY/2D37t1as2aNMjIytGvXLsXGxur%2B%2B%2B9XfX19V08NAAD0EBSsf7BlyxbNmjVL06dPV0xMjFasWKF/%2BZd/0Y4dO7p6agAAoIegYH1KS0uL/vSnP2nChAnebRaLRcnJyaqsrOzCmeHTbNZLn3TsSf8DAFxLuMn9U86ePSu32y273W7YHhERoffff7%2BLZoV/dEPff9GTr/5Pt/%2B0oyQNsgdryW1fuYKRZjy2wgw8%2BgIAzEDBMpnD4VBtba3P9i9HBHfBbDrmxn7Bcrd1/9WW6PDrdKbhk66exhWJCrtOOw79VR81du/5fjHsOs0aN7Crp2FgtUqtra2yWqUAvlORRzvIxKjjefT%2BN7FsNutlr8uRkZGKiory27H5I/kpffv2lc1mk9PpNGyvq6vzWdW6nLKyMq1fv95n%2B9ixY/WjJ57w629mT%2BJwOFRWVqZZs2aRicijPQ6HQ9u2bSaT/0UevsjEiDx8ORwO/ed//qfeeustn33p6elavHix345NwfqUwMBADR8%2BXOXl5Zo8ebIkyePxqLy8XHffffcVvcasWbOUlpZm2Hby5Ek99NBDqq2t5Q/9/6qtrdX69euVlpZGJiKP9pCJEXn4IhMj8vBVW1urt956S4899phiYmIM%2ByIjI/16bArWP7j33nu1bNkyjRgxQiNHjtTWrVt14cIF3XHHHVf09VFRUfzBBgCgG4mJidHw4cM79ZgUrH/w9a9/XWfPntWPf/xjOZ1ODRs2TJs2bVK/fv26emoAAKCHoGC1Y%2B7cuZo7d25XTwMAAPRQvf8jBAAAAJ3MlpeXl9fVk7gWhISEaNy4cQoJCenqqXQbZGJEHr7IxIg8fJGJEXn46qpMLB6Pp/s/%2BAgAAKAH4S1CAAAAk1GwAAAATEbBAgAAMBkFCwAAwGQULAAAAJNRsAAAAExGwQIAADAZBQsAAMBkFCyTlJaWKi0tTaNGjdJdd92lI0eOfOb4P/7xj7rjjjs0cuRITZ06Vbt27eqkmXaOjuTx6quv6tvf/rYmTJigpKQk/cd//If279/fibPtHB39M3LJ22%2B/reHDh2vGjBl%2BnmHn62gmLpdLTz75pNLS0jRy5EhNnjxZO3fu7KTZ%2Bl9H8/j1r3%2Btf/u3f9Po0aOVkpKi5cuX6%2B9//3snzda/KioqtHDhQqWmpio2NlZ79uz5p1/T27%2BvdjST3v699fP8GbmkM76vUrBMsHv3bq1Zs0YZGRnatWuXYmNjdf/996u%2Bvr7d8X/961%2B1cOFC3XzzzXrhhRc0b948ZWdn68CBA508c//oaB5vvfWWbrnlFm3cuFG7du3S%2BPHjtXDhQp04caKTZ%2B4/Hc3kknPnzumRRx7RhAkTOmmmnefzZLJkyRL98Y9/1OrVq/XKK6/oiSee0E033dSJs/afjubx9ttv65FHHtFdd92ll156ST/%2B8Y919OhR5eTkdPLM/aO5uVnDhg1Tbm6uLBbLPx3f27%2BvSh3PpLd/b%2B1oHpd02vdVD67anXfe6cnPz/f%2Bd1tbmyc1NdWzYcOGdsevXbvW841vfMOw7f%2B3d3chUX1rHMe/M5ZFGWkmeRFdWJiipg70otRIb5jZhVmQEERGQWATDgYmRYZoUmI2hV341oVkUBhOKiQUJRFeaJCgJJEZaRg1Mokv2di4/xeRB8vzP2dPM3tyfD7gzWKNPuvnzMPaayvbbDYrx48f92idWlGbx2xSU1OV8vJyT5TnFa5mYjabFYvFoty4cUNJS0vzdJmaUptJa2ursnHjRmV4eFirEjWlNo/q6mpl9%2B7dM8Zqa2uVpCyYWGkAAAY8SURBVKQkT5bpFevXr1cePXr0r3N8va/%2B6v/JZDa%2B1lt/UpOHVn1VTrD%2B0OTkJN3d3TN2wjqdjsTERF6%2BfDnrazo7O0lMTJwxtnXr1v86fy5xJY9fKYrC2NgYy5cv91SZmnI1k/r6egYGBjh16pQWZWrKlUyePHlCdHQ0lZWVGI1GkpOTuXz5Mt%2B%2BfdOqbI9xJY%2B4uDgGBwdpbW0FwGaz8fDhQ5KSkjSp%2BW/jy33VXXytt7pCy766wOM/wcfZ7XacTicrV66cMR4cHExfX9%2Bsr/n8%2BTPBwcG/zR8dHcXhcODv7%2B%2Bxej3NlTx%2BVVVVxfj4OCkpKZ4oUXOuZPLu3TvKysqoq6tDr/e96yBXMunv76ejowN/f3/Ky8ux2%2B1cvHiR4eFhLl26pEXZHuNKHgaDgZKSEsxmMw6Hg%2B/fv7Njxw6fuUWoli/3VXfxtd6qltZ91fc6t5jTGhsbuXnzJhaLhRUrVni7HK%2BYmprizJkzmEwm1qxZA/y48pzvFEVBr9dTWlpKTEwMRqORvLw8GhoacDgc3i5Pc2/evKGoqAiTycT9%2B/eprq5mYGBg3m6wxL%2Bb773VG31VTrD%2BUFBQEH5%2BfthsthnjQ0NDv12N/hQSEsLQ0NBv8wMCAub8VZYrefzU3NzMhQsXsFgsbNmyxZNlakptJmNjY3R1ddHT00NBQQHwozkoikJ0dDTV1dVs3rxZk9o9xdXPzapVq1i6dOn0WFhYGIqi8PHjx%2BmmORe5kkdFRQUGg4HMzEwAwsPDyc/P5/Dhw5jN5v/5efM1vtxX/5Sv9lY1vNFX5QTrDy1cuJCoqCja2tqmxxRFoa2tjfj4%2BFlfExcXN2M%2BwPPnz4mLi/NorVpwJQ%2BApqYmzp07x9WrVzEajVqUqhm1mQQEBNDU1ERDQwNWqxWr1UpGRgZhYWFYrVZiY2O1LN8jXHmfGAwGPn36xNevX6fH%2Bvr60Ov1hIaGerxmT3Ilj4mJCRYsmHmNrNfr0el08/LE05f76p/w5d6qhjf6qmyw3ODo0aPcu3ePhoYGent7yc/PZ2JigvT0dABKS0vJzc2dnp%2BRkUF/fz8lJSW8ffuW27dv09LSMn0lOtepzaOxsZGzZ8%2BSm5tLTEwMNpsNm83G6Oiot5bgdmoy0el0rFu3bsZXcHAwixYtYu3atSxevNibS3Ebte%2BTffv2ERgYSF5eHr29vbS3t1NSUsKBAwd84oRCbR7bt2%2BnpaWFO3fu0N/fz4sXLygqKiI2NpaQkBBvLcNtxsfH6enp4dWrV8CPv8Hr6elhcHAQmH99FdRn4uu9VU0e3uircovQDfbu3Yvdbuf69evYbDYiIyOpqqqavs9ts9mmf%2BEAq1evpqKiguLiYmprawkNDaWwsPC3/4CZq9TmcffuXZxOJwUFBdNHtwBpaWkUFxdrXr8nqM1kPlCbyZIlS6ipqaGwsJCDBw8SGBhISkoK2dnZ3lqCW6nNY//%2B/YyPj1NXV8eVK1dYtmwZCQkJ5OTkeGsJbtXV1cWRI0fQ6XTodDouX74M/KcvzLe%2BCuoz8fXeqjYPremU%2BXiWLIQQQgjhQXKLUAghhBDCzWSDJYQQQgjhZrLBEkIIIYRwM9lgCSGEEEK4mWywhBBCCCHcTDZYQgghhBBuJhssIYQQQgg3kw2WEEIIIbyio6ODkydPsm3bNiIiInj8%2BLHq7/Hs2TMOHTqEwWAgISGB06dP8%2BHDBw9Uq45ssIQQQgjhFePj40RGRpKfn49Op1P9%2BoGBAbKyskhISMBqtVJTU4PdbsdkMnmgWnXkUTlCCCGE8Aqj0Tj9EOrZHizjcDgoKyujubmZkZERwsPDycnJYdOmTQB0d3czNTU145FZx44dIysrC6fTiZ%2BfnzYLmYWcYAkhhBDir1RQUEBnZyfXrl3jwYMH7NmzhxMnTvD%2B/XsAoqKi0Ov11NfXMzU1xcjICFarlcTERK9urkCeRSiEEEKIv0BERATl5eXs3LkTgMHBQXbt2sXTp08JCQmZnpeZmcmGDRswm80AtLe3k52dzZcvX3A6ncTHx1NZWUlAQIBX1vGT3CIUQgghxF/n9evXOJ1OkpOTZ9w%2BnJycJCgoCACbzcb58%2BdJT08nNTWV0dFRLBYLJpOJW7dueat0AP4BfXSbqbRoSG8AAAAASUVORK5CYII%3D"/>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12" id="common-2485326993927319438">
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">1100000</td>
+        <td class="number">387</td>
+        <td class="number">2.2%</td>
+        <td>
+            <div class="bar" style="width:3%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">425000</td>
+        <td class="number">362</td>
+        <td class="number">2.0%</td>
+        <td>
+            <div class="bar" style="width:3%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">350000</td>
+        <td class="number">358</td>
+        <td class="number">2.0%</td>
+        <td>
+            <div class="bar" style="width:3%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">1200000</td>
+        <td class="number">343</td>
+        <td class="number">1.9%</td>
+        <td>
+            <div class="bar" style="width:3%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">375000</td>
+        <td class="number">338</td>
+        <td class="number">1.9%</td>
+        <td>
+            <div class="bar" style="width:3%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">525000</td>
+        <td class="number">328</td>
+        <td class="number">1.9%</td>
+        <td>
+            <div class="bar" style="width:3%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">325000</td>
+        <td class="number">315</td>
+        <td class="number">1.8%</td>
+        <td>
+            <div class="bar" style="width:3%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">400000</td>
+        <td class="number">305</td>
+        <td class="number">1.7%</td>
+        <td>
+            <div class="bar" style="width:3%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">1000000</td>
+        <td class="number">303</td>
+        <td class="number">1.7%</td>
+        <td>
+            <div class="bar" style="width:3%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">475000</td>
+        <td class="number">298</td>
+        <td class="number">1.7%</td>
+        <td>
+            <div class="bar" style="width:3%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (197)</td>
+        <td class="number">14344</td>
+        <td class="number">81.1%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12"  id="extreme-2485326993927319438">
+            <p class="h4">Minimum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">0</td>
+        <td class="number">8</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:12%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">10000</td>
+        <td class="number">13</td>
+        <td class="number">0.1%</td>
+        <td>
+            <div class="bar" style="width:20%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">20000</td>
+        <td class="number">16</td>
+        <td class="number">0.1%</td>
+        <td>
+            <div class="bar" style="width:24%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">30000</td>
+        <td class="number">36</td>
+        <td class="number">0.2%</td>
+        <td>
+            <div class="bar" style="width:54%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">40000</td>
+        <td class="number">67</td>
+        <td class="number">0.4%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+            <p class="h4">Maximum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">92000000</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">95500000</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">97000000</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">105000000</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">123000000</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+    </div>
+</div>
+</div><div class="row variablerow">
+    <div class="col-md-3 namecol">
+        <p class="h4 pp-anchor" id="pp_var_Wage">Wage<br/>
+            <small>Numeric</small>
+        </p>
+    </div><div class="col-md-6">
+    <div class="row">
+        <div class="col-sm-6">
+            <table class="stats ">
+                <tr>
+                    <th>Distinct count</th>
+                    <td>141</td>
+                </tr>
+                <tr>
+                    <th>Unique (%)</th>
+                    <td>0.8%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Missing (n)</th>
+                    <td>0</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (%)</th>
+                    <td>0.0%</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Infinite (n)</th>
+                    <td>0</td>
+                </tr>
+            </table>
+
+        </div>
+        <div class="col-sm-6">
+            <table class="stats ">
+
+                <tr>
+                    <th>Mean</th>
+                    <td>11647</td>
+                </tr>
+                <tr>
+                    <th>Minimum</th>
+                    <td>1000</td>
+                </tr>
+                <tr>
+                    <th>Maximum</th>
+                    <td>565000</td>
+                </tr>
+                <tr class="ignore">
+                    <th>Zeros (%)</th>
+                    <td>0.0%</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="col-md-3 collapse in" id="minihistogram3582540595034028961">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABLCAYAAAA1fMjoAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAABbtJREFUeJzt3E9IlHkcx/HP%2BAwKy7qWMerM2CFcDwbBXrKCiI10nslyDg2igbgudOjgxQLJBAkG6dgh143uUjKMUhRaLVJdWrSFRWoXIql8nJmacXT2H42uM989RM9mLT9mlvV5muXzuul3fv5%2BA89b5/GfQ0QEFkskEhgbG0N7ezuqqqqs3p6KjJ3Xi8OOQIiKhdOujX%2Bcf4Wl39cKWlNXXY4dNVs26UREH7ItkB%2Ber%2BDb6ecFrfnmqy%2Bwo2ZzzkP0T0rsPgDRx4yBECkwECIFBkKkwECIFBgIkQIDIVJgIEQKDIRIgYEQKTAQIgUGQqTAQIgUGAiRAgMhUmAgRAoMhEiBgRApMBAiBQZCpMBAiBQYCJECAyFSYCBECgyESIGBECkwECIFBkKkwECIFBgIkQIDIVJgIEQKDIRIgYEQKTAQIgUGQqTAQIgUGAiRAgMhUmAgRAoMhEiBgRApMBAiBafdB8iXs8SBMqcD6%2BvrBa0TEQCAw%2BEoaJ2maQWvof8fh7y9giz2/c9R/BT/Le/Hb/nEicQvq3j162pB%2BzS4P8XyH38WtK76szJ8/eXn0DStoL3o33M6P87P1bacKpFIYPa7cbS3t6OqqsqOI1ARSSQSGBsbs%2BV6seUeJJlMYnh4GMlk0o7tqcjYeb3wJp1IgYEQKTAQIgUGQqRgSyAulws9PT1wuVx2bE9Fxs7rxbafgxAVA77EIlJgIEQKDIRIgYEQKTAQIgUGQqTAQIgULA/kxYsX6OjogK7raGtrw/z8vNVHIAusra0hFApB13UEAgH09fUBAJaXl3HixAnouo7W1lY8fPjQXJPJZHD69Gn4fD74/X7cunXLnIkIQqEQmpuboes6RkdHN%2Bw3MjKC5uZm%2BHw%2BXLhwYcMsHA5D13X4fD4MDg4im83m/0TEYl1dXTIxMSEiIlNTUxIMBq0%2BAllgaGhIQqGQ%2BfbS0pKIiPT398vFixdFRGRubk4OHDgg6%2BvrIiIyPDwsZ86cERERwzBk3759kk6nRURkYmJCuru7RUQknU7LwYMH5enTpyIiMjMzI0ePHpVMJiOrq6ty7NgxuXv3roiILCwsyP79%2ByWVSomIyMmTJ2V0dDTv52HpV5Dl5WU8fvwYgUAAAKDrOl6%2BfAnDMKw8Bm2y169fIxKJoLe313zftm3bAACTk5M4fvw4AGDXrl2orq7GzMzMB7Pa2lo0Njbizp075qytrQ0AUFFRgcOHD%2BPGjRvmLBAIoKysDKWlpQgGg7h58yYA4Pbt2zh06BAqKysBAB0dHeYsH5YGEo/H4XK5UFLy97ZutxuxWMzKY9AmW1hYQEVFBS5duoRgMIjOzk48ePAA6XQa2WzWjAUAPB4P4vE4ACAWi8Hj8Zgzr9e7Yeb1eguexePxDR%2BztrbWnOWDN%2Bn0n8tms4jFYqivr0ckEsHAwABOnTqFbDZr/hONYmFpIG63G8lkErlcznzf%2B4VT8XO73dA0Da2trQCAhoYGeL1ePHnyBE6nE6lUynxsNBqF2%2B0G8OYz/7uvJt6deTweRKPRgmfvv0JZXFw0Z/mwNJDKykrs3LkT165dAwBMTU2hpqYG27dvt/IYtMm2bt2KvXv34v79%2BwAAwzAQjUZRV1cHv9%2BPK1euAADm5uaQSCTQ2NgI4M096duZYRiYnZ1FU1MTAMDv9yMcDiOXyyGdTmNychItLS3m7Pr168hkMlhbW0MkEsGRI0cAAD6fD9PT00ilUhARXL161VyXD8t/3f3Zs2fo7%2B/HysoKysvLcf78edTX11t5BLKAYRgYGBjAysoKNE1DT08PmpqakEql0NfXh8XFRZSWlmJwcBC7d%2B8G8Obm/uzZs3j06BE0TUNvby90XQcA5HI5DA0N4d69eygpKUFXVxc6OzvN/UZGRjA%2BPg6Hw4GWlpYN3yAIh8O4fPkyHA4H9uzZg3PnzuX9L5349yBECrxJJ1JgIEQKfwFi%2Ba6W1McicgAAAABJRU5ErkJggg%3D%3D">
+
+</div>
+<div class="col-md-12 text-right">
+    <a role="button" data-toggle="collapse" data-target="#descriptives3582540595034028961,#minihistogram3582540595034028961"
+       aria-expanded="false" aria-controls="collapseExample">
+        Toggle details
+    </a>
+</div>
+<div class="row collapse col-md-12" id="descriptives3582540595034028961">
+    <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation" class="active"><a href="#quantiles3582540595034028961"
+                                                  aria-controls="quantiles3582540595034028961" role="tab"
+                                                  data-toggle="tab">Statistics</a></li>
+        <li role="presentation"><a href="#histogram3582540595034028961" aria-controls="histogram3582540595034028961"
+                                   role="tab" data-toggle="tab">Histogram</a></li>
+        <li role="presentation"><a href="#common3582540595034028961" aria-controls="common3582540595034028961"
+                                   role="tab" data-toggle="tab">Common Values</a></li>
+        <li role="presentation"><a href="#extreme3582540595034028961" aria-controls="extreme3582540595034028961"
+                                   role="tab" data-toggle="tab">Extreme Values</a></li>
+
+    </ul>
+
+    <div class="tab-content">
+        <div role="tabpanel" class="tab-pane active row" id="quantiles3582540595034028961">
+            <div class="col-md-4 col-md-offset-1">
+                <p class="h4">Quantile statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Minimum</th>
+                        <td>1000</td>
+                    </tr>
+                    <tr>
+                        <th>5-th percentile</th>
+                        <td>1000</td>
+                    </tr>
+                    <tr>
+                        <th>Q1</th>
+                        <td>2000</td>
+                    </tr>
+                    <tr>
+                        <th>Median</th>
+                        <td>4000</td>
+                    </tr>
+                    <tr>
+                        <th>Q3</th>
+                        <td>12000</td>
+                    </tr>
+                    <tr>
+                        <th>95-th percentile</th>
+                        <td>46000</td>
+                    </tr>
+                    <tr>
+                        <th>Maximum</th>
+                        <td>565000</td>
+                    </tr>
+                    <tr>
+                        <th>Range</th>
+                        <td>564000</td>
+                    </tr>
+                    <tr>
+                        <th>Interquartile range</th>
+                        <td>10000</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-4 col-md-offset-2">
+                <p class="h4">Descriptive statistics</p>
+                <table class="stats indent">
+                    <tr>
+                        <th>Standard deviation</th>
+                        <td>23179</td>
+                    </tr>
+                    <tr>
+                        <th>Coef of variation</th>
+                        <td>1.99</td>
+                    </tr>
+                    <tr>
+                        <th>Kurtosis</th>
+                        <td>89.569</td>
+                    </tr>
+                    <tr>
+                        <th>Mean</th>
+                        <td>11647</td>
+                    </tr>
+                    <tr>
+                        <th>MAD</th>
+                        <td>12033</td>
+                    </tr>
+                    <tr class="">
+                        <th>Skewness</th>
+                        <td>7.0537</td>
+                    </tr>
+                    <tr>
+                        <th>Sum</th>
+                        <td>205936000</td>
+                    </tr>
+                    <tr>
+                        <th>Variance</th>
+                        <td>537250000</td>
+                    </tr>
+                    <tr>
+                        <th>Memory size</th>
+                        <td>276.3 KiB</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-8 col-md-offset-2" id="histogram3582540595034028961">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQCAYAAAByNR6YAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAPYQAAD2EBqD%2BnaQAAIABJREFUeJzs3X9clfX9//HnOQfsw0CYcGBKX9smThFRBEWTwBIzb%2BW2m%2B1j%2BTHXD2e55hS3kZbBAEWkLG2k1Qfth7qxYs7cVtlauuay4adIAc2sT6LG56N5OAcDiQw4nO8fzvPZGdg8XBcdsMf9dtsNdl0vznldL295PX2f67qweDwejwAAAGAaa6AbAAAAuNQQsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkwU8YFVWVuruu%2B9WRkaG4uPjtWvXLp/9LS0tWrFiha6%2B%2BmolJSVp%2BvTpeu6553xqWltbtXz5ck2YMEHJycnKysqSy%2BXyqWlsbFR2drbGjh2r1NRU5eTkqKWlxafm5MmTmj9/vsaMGaOrrrpKq1evVkdHh%2BFjdDgcWrdunRwOh%2BHX%2BjJifsYwP2OYnzHMzxjmZ0wg5xfwgNXS0qIRI0YoPz9fFoul0/7i4mK98cYbWrNmjV5%2B%2BWXdcccdKiws1GuvveatKSoq0u7du7Vu3TqVlZXJ4XBo0aJFPq%2BTnZ2t2tpabdq0SaWlpaqsrFReXp53f0dHh%2BbPny%2B3263y8nI98MAD2r59u0pKSgwfY319vdavX6/6%2BnrDr/VlxPyMYX7GMD9jmJ8xzM%2BYQM4v4AFr0qRJWrx4sa699lp5PJ5O%2B6uqqjRjxgyNGzdOsbGxuummmzR8%2BHDV1NRIkpqbm7Vt2zYtW7ZM48ePV0JCglatWqV9%2B/Z5a44cOaI9e/aoqKhIo0aNUkpKinJzc7Vjxw7v0F9//XXV1tbqoYce0vDhw5WRkaHFixfr17/%2Btdrb27%2B4gQAAgD4v4AHrX0lOTtaf//xnnTp1SpK0d%2B9eHT9%2BXOnp6ZKkgwcPyu12a%2BLEid6fGTJkiGJjY7V//35J50JaRESEEhISvDVpaWmyWCyqrq6WJFVXV2vYsGGKjIz01qSnp%2BvMmTP64IMPevw4AQDApSMo0A38K7m5ucrLy9PVV1%2BtoKAgWa1WFRYWauzYsZIkp9Op4OBghYWF%2BfxcVFSUnE6nt%2BYfg5Mk2Ww2RURE%2BNRERUX51Njtdknnlhjj4%2BN75PgAAMClp9cHrF/%2B8peqrq5WaWmpBg0apLfeekvLly9XTEyMz6pVb%2BFwODp91nvkyJEAdQMAALo6D0dHRysmJqbH3rNXB6zPPvtMjzzyiB577DFdffXVkqRhw4bp3Xff1dNPP62JEyfKbrerra1Nzc3NPqtYLpfLuwJlt9vV0NDg89put1uNjY0%2BNQcOHPCpOb%2B6FR0dfdE9l5eXa/369Z22//jHP9bIkSMv%2BnXwf0aOHKn33nsv0G30WczPGOZnDPMzhvkZM3LkSKWmpmrJkiWd9i1cuLDTDXFm6tUBq62tTe3t7bLZbD7brVar9/EJiYmJstlsqqio0NSpUyVJtbW1OnHihJKTkyVJY8aMUVNTkw4dOuS9DquiokIej0dJSUnemtLSUjU0NHg/TnzjjTfUv39/xcXFXXTPs2bNUmZmZqft0dHRamr6VG638cc%2BfNnYbFaFh4cwv25ifsYwP2OYnzHMzxibzaq1a9d2eRehP4sn3RHwgNXS0qIPP/zQewdhXV2dDh8%2BrIiICA0aNEipqal68MEH1a9fP8XGxurNN9/U73//e91///2SpLCwMM2cOVPFxcUKDw9XaGioVq5cqZSUFI0ePVqSFBcXp/T0dOXm5qqgoEBtbW0qLCzU9OnTvQNOT09XXFycli5dqnvuuUf19fUqKSnRnDlzFBwcfNHHExMTc8Elx9OnP1F7O/%2BBdJfb3cH8DGB%2BxjA/Y5ifMcyv%2Bz7vvNyTLJ6uno3wBXrzzTd12223dXoG1owZM1RcXCyXy6U1a9bojTfeUGNjo2JjYzVr1izdfvvt3trW1lY9%2BOCDevHFF9Xa2qqMjAzl5%2Bf7XLTe1NSkFStW6LXXXpPVatW0adOUk5OjkJAQb83JkydVUFCgN998UyEhIbrxxhuVnZ0tq9Wcmy0JWN0TFGTVgAGhzK%2BbmJ8xzM8Y5mcM8zPm/PwCIeAB68uE/0C6h79gjGF%2BxjA/Y5ifMczPmEAGrF7/HCwAAIC%2BhoAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJggLdwJfFR6fP6C8HP5Kno%2B/86kd7/34aMzhSkuVf1gIAgP9DwPqCnG11a80fj6jvxCvpmuGRfw9YAADAH3xECAAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmCzgAauyslJ33323MjIyFB8fr127dnWqOXLkiH70ox9p3LhxSk5O1k033aSPPvrIu7%2B1tVXLly/XhAkTlJycrKysLLlcLp/XaGxsVHZ2tsaOHavU1FTl5OSopaXFp%2BbkyZOaP3%2B%2BxowZo6uuukqrV69WR0dHzxw4AAC4ZAU8YLW0tGjEiBHKz8%2BXxWLptP/DDz/ULbfcoqFDh%2BpXv/qV/vCHP2jBggXq16%2Bft6aoqEi7d%2B/WunXrVFZWJofDoUWLFvm8TnZ2tmpra7Vp0yaVlpaqsrJSeXl53v0dHR2aP3%2B%2B3G63ysvL9cADD2j79u0qKSnpuYMHAACXpKBANzBp0iRNmjRJkuTxeDrt/8UvfqFrrrlG2dnZ3m2DBw/2ft/c3Kxt27bpkUce0fjx4yVJq1at0g033KCamhqNHj1aR44c0Z49e/T8888rISFBkpSbm6sf/vCHuvfeexUdHa3XX39dtbW12rx5syIjIzV8%2BHAtXrxYa9as0aJFixQUFPBRAQCAPiLgK1ifx%2BPx6C9/%2BYu%2B/vWva968eUpLS9PNN9%2BsnTt3emsOHjwot9utiRMnercNGTJEsbGx2r9/vySpqqpKERER3nAlSWlpabJYLKqurpYkVVdXa9iwYYqMjPTWpKen68yZM/rggw96%2BlABAMAlpFcHLJfLpZaWFm3cuFFXX321nn76aV177bVatGiRKisrJUlOp1PBwcEKCwvz%2BdmoqCg5nU5vzT8GJ0my2WyKiIjwqYmKivKpsdvtkqT6%2BvoeOT4AAHBp6tWfe52/wPzaa6/VbbfdJkmKj4/X/v379eyzz2rcuHGBbK9LDoejy0BmCRkQgG4MskhBQdZz3wSQzWb1%2BQr/MD9jmJ8xzM8Y5meMzWa94Hk5OjpaMTExPfbevTpgDRgwQEFBQYqLi/PZHhcXp3379kk6t8rU1tam5uZmn1Usl8vlXYGy2%2B1qaGjweQ23263GxkafmgMHDvjUnF/dio6Ovuiey8vLtX79%2Bk7bV6197KJfo/ewKDw8RDabLdCNSJLCw0MC3UKfxvyMYX7GMD9jmF/3bd78ZJfn5YULF3a6Ic5MvTpgBQcHKzExUUePHvXZfuzYMcXGxkqSEhMTZbPZVFFRoalTp0qSamtrdeLECSUnJ0uSxowZo6amJh06dMh7HVZFRYU8Ho%2BSkpK8NaWlpWpoaPB%2BnPjGG2%2Bof//%2BnQLe55k1a5YyMzM7bbeEDJD%2BVuPnBALNo6amT9UbVrDCw0PU1PSp3G4em%2BEv5mcM8zOG%2BRnD/Iyx2awXPC/7s3jSHQEPWC0tLfrwww%2B9dxDW1dXp8OHDioiI0KBBg3TnnXfqpz/9qcaNG6cJEybor3/9q/7yl7/ol7/8pSQpLCxMM2fOVHFxscLDwxUaGqqVK1cqJSVFo0ePlnRuxSs9PV25ubkqKChQW1ubCgsLNX36dO%2BA09PTFRcXp6VLl%2Bqee%2B5RfX29SkpKNGfOHAUHB1/08cTExHS55Hjs1MdGR/XF80jt7R0KdMA6z%2B3u%2BHs/6A7mZwzzM4b5GcP8uu9C5%2BWeZvF09WyEL9Cbb76p2267rdMzsGbMmKHi4mJJ0vPPP6/S0lKdOnVK3/zmN5WVlaXJkyd7a1tbW/Xggw/qxRdfVGtrqzIyMpSfn%2B9z0XpTU5NWrFih1157TVarVdOmTVNOTo5CQv5v2fXkyZMqKCjQm2%2B%2BqZCQEN14443Kzs6W1Wr8s%2B9jpz7WTY/uVUCH7adrhkfq3uvjFeiAFRRk1YABoTp9%2BhP%2BgukG5mcM8zOG%2BRnD/Iw5P79ACHjA%2BrIgYHUff8EYw/yMYX7GMD9jmJ8xgQxY3JYAAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYLOABq7KyUnfffbcyMjIUHx%2BvXbt2XbA2Ly9P8fHx2rJli8/21tZWLV%2B%2BXBMmTFBycrKysrLkcrl8ahobG5Wdna2xY8cqNTVVOTk5amlp8ak5efKk5s%2BfrzFjxuiqq67S6tWr1dHRYd7BAgCAL4WAB6yWlhaNGDFC%2Bfn5slgsF6x79dVXVVNTo6997Wud9hUVFWn37t1at26dysrK5HA4tGjRIp%2Ba7Oxs1dbWatOmTSotLVVlZaXy8vK8%2Bzs6OjR//ny53W6Vl5frgQce0Pbt21VSUmLewQIAgC%2BFgAesSZMmafHixbr22mvl8Xi6rDl16pSKioq0Zs0a2Ww2n33Nzc3atm2bli1bpvHjxyshIUGrVq3Svn37VFNTI0k6cuSI9uzZo6KiIo0aNUopKSnKzc3Vjh07VF9fL0l6/fXXVVtbq4ceekjDhw9XRkaGFi9erF//%2Btdqb2/v2SEAAIBLSsAD1r/i8Xi0dOlS3XnnnYqLi%2Bu0/%2BDBg3K73Zo4caJ325AhQxQbG6v9%2B/dLkqqqqhQREaGEhARvTVpamiwWi6qrqyVJ1dXVGjZsmCIjI7016enpOnPmjD744IOeOjwAAHAJ6vUBa8OGDQoODtb3v//9Lvc7nU4FBwcrLCzMZ3tUVJScTqe35h%2BDkyTZbDZFRET41ERFRfnU2O12SfKucgEAAFyMoEA38HkOHjyoX/7yl9q%2BfXugW7loDoejy0BmCRkQgG4MskhBQdZz3wSQzWb1%2BQr/MD9jmJ8xzM8Y5meMzWa94Hk5OjpaMTExPfbevTpgvf3222poaNA111zj3eZ2u/XAAw9o8%2BbN2rVrl%2Bx2u9ra2tTc3OyziuVyubwrUHa7XQ0NDT6v7Xa71djY6FNz4MABn5rzq1vR0dEX3XN5ebnWr1/fafuqtY9d9Gv0HhaFh4d0uu4tUMLDQwLdQp/G/IxhfsYwP2OYX/dt3vxkl%2BflhQsXdrohzky9OmDNmDFDV111lc%2B2H/zgB5oxY4a%2B973vSZISExNls9lUUVGhqVOnSpJqa2t14sQJJScnS5LGjBmjpqYmHTp0yHsdVkVFhTwej5KSkrw1paWlamho8H6c%2BMYbb6h///5dXvt1IbNmzVJmZman7ZaQAdLfavycQKB51NT0qXrDClZ4eIiamj6V281jM/zF/IxhfsYwP2OYnzE2m/WC52V/Fk%2B6I%2BABq6WlRR9%2B%2BKH3DsK6ujodPnxYERERGjRokCIiInzqg4KCZLfb9Y1vfEOSFBYWppkzZ6q4uFjh4eEKDQ3VypUrlZKSotGjR0uS4uLilJ6ertzcXBUUFKitrU2FhYWaPn26d8Dp6emKi4vT0qVLdc8996i%2Bvl4lJSWaM2eOgoODL/p4YmJiulxyPHbq4%2B6MJ7A8Unt7hwIdsM5zuzv%2B3g%2B6g/kZw/yMYX7GML/uu9B5uacFPGAdPHhQt912mywWiywWix588EFJ51aviouLO9V39ays%2B%2B%2B/XzabTVlZWWptbVVGRoby8/N9atasWaMVK1Zo7ty5slqtmjZtmnJycrz7rVarSktLVVBQoNmzZyskJEQ33nijsrKyTD5iAABwqbN4LvTwKZjq2KmPddOje9WXhn3N8Ejde328Ar2CFRRk1YABoTp9%2BhP%2BBdcNzM8Y5mcM8zOG%2BRlzfn6BwG0JAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJgt4wKqsrNTdd9%2BtjIwMxcfHa9euXd597e3teuihh/Sd73xHycnJysjI0L333iuHw%2BHzGq2trVq%2BfLkmTJig5ORkZWVlyeVy%2BdQ0NjYqOztbY8eOVWpqqnJyctTS0uJTc/LkSc2fP19jxozRVVddpdWrV6ujo6PnDh4AAFySAh6wWlpaNGLECOXn58tisfjsO3v2rA4fPqyFCxdq%2B/bteuyxx3T06FEtWLDAp66oqEi7d%2B/WunXrVFZWJofDoUWLFvnUZGdnq7a2Vps2bVJpaakqKyuVl5fn3d/R0aH58%2BfL7XarvLxcDzzwgLZv366SkpKeO3gAAHBJCgp0A5MmTdKkSZMkSR6Px2dfWFiYnnrqKZ9tP//5z3XzzTfro48%2B0sCBA9Xc3Kxt27bpkUce0fjx4yVJq1at0g033KCamhqNHj1aR44c0Z49e/T8888rISFBkpSbm6sf/vCHuvfeexUdHa3XX39dtbW12rx5syIjIzV8%2BHAtXrxYa9as0aJFixQUFPBRAQCAPiLgK1j%2BOnPmjCwWi/r37y9JOnjwoNxutyZOnOitGTJkiGJjY7V//35JUlVVlSIiIrzhSpLS0tJksVhUXV0tSaqurtawYcMUGRnprUlPT9eZM2f0wQcffBGHBgAALhF9KmC1trbq4Ycf1re//W2FhoZKkpxOp4KDgxUWFuZTGxUVJafT6a35x%2BAkSTabTRERET41UVFRPjV2u12SVF9f3yPHAwAALk195nOv9vZ2ZWVlyWKxKD8/P9DtXJDD4egykFlCBgSgG4MsUlCQ9dw3AWSzWX2%2Bwj/MzxjmZwzzM4b5GWOzWS94Xo6OjlZMTEyPvXefCFjt7e1avHixPvroI23evNm7eiWdW2Vqa2tTc3OzzyqWy%2BXyrkDZ7XY1NDT4vKbb7VZjY6NPzYEDB3xqzq9uRUdHX3Sv5eXlWr9%2Bfaftq9Y%2BdtGv0XtYFB4eIpvNFuhGJEnh4SGBbqFPY37GMD9jmJ8xzK/7Nm9%2Bssvz8sKFCzvdEGemXh%2Bwzoeruro6bdmyRRERET77ExMTZbPZVFFRoalTp0qSamtrdeLECSUnJ0uSxowZo6amJh06dMh7HVZFRYU8Ho%2BSkpK8NaWlpWpoaPB%2BnPjGG2%2Bof//%2BiouLu%2Bh%2BZ82apczMzE7bLSEDpL/V%2BD%2BAgPKoqelT9YYVrPDwEDU1fSq3m8dm%2BIv5GcP8jGF%2BxjA/Y2w26wXPy/4snnRHwANWS0uLPvzwQ%2B8dhHV1dTp8%2BLAiIiIUHR2tRYsW6fDhw/rP//xPtbe3e1eVIiIivNdezZw5U8XFxQoPD1doaKhWrlyplJQUjR49WpIUFxen9PR05ebmqqCgQG1tbSosLNT06dO9A05PT1dcXJyWLl2qe%2B65R/X19SopKdGcOXMUHBx80ccTExPT5ZLjsVMfGx3VF88jtbd3KNAB6zy3u%2BPv/aA7mJ8xzM8Y5mcM8%2Bu%2BC52Xe5rF88/PRviCvfnmm7rttts6PQNrxowZWrhwoaZMmeKzz%2BPxyGKxaMuWLUpNTZV07uL3Bx98UC%2B%2B%2BKJaW1uVkZGh/Px8n4vWm5qatGLFCr322muyWq2aNm2acnJyFBLyf8uuJ0%2BeVEFBgd58802FhIToxhtvVHZ2tqxW4599Hzv1sW56dK8COmw/XTM8UvdeH69AB6ygIKsGDAjV6dOf8BdMNzA/Y5ifMczPGOZnzPn5BULAA9aXBQGr%2B/gLxhjmZwzzM4b5GcP8jAlkwOK2BAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATOZ3wGpubu6JPgAAAC4Zfges9PR03XfffXrrrbd6oh8AAIA%2Bz%2B%2BAlZ2drffee0%2B33nqrrrvuOpWWlurUqVM90RsAAECf5HfAuvXWW7V9%2B3Y9//zzmjRpkp555hllZmZq/vz5evXVV9Xe3t4TfQIAAPQZ3b7IPSEhQbm5uXr99df18MMPq6mpSVlZWZo0aZIefPBB1dXVmdknAABAn2HoLkKPx6OKigr98Y9/1DvvvKPIyEhNnjxZf/zjH3X99dfrt7/9rVl9AgAA9BlB3fmhuro6bdu2Tb/73e/kcDiUlpamNWvWKDMzU0FBQero6NBDDz2kRx55RDNnzjS7ZwAAgF7N74B166236u2331Z0dLT%2B/d//XTNnzlRsbKxPjdVq1fXXX69nnnnGtEYBAAD6Cr8DVv/%2B/fX4449r0qRJslov/AljfHy8/vSnPxlqDgAAoC/yO2A9/vjjF1XXr18/XXHFFX43BAAA0Nf5fZH7yy%2B/rKeffrrLfc8884xeeeUVw00BAAD0ZX4HrNLSUtlsti73BQcHq7S01HBTAAAAfZnfAev48eMaNmxYl/uGDh2qo0ePGm4KAACgL/M7YAUHB6uhoaHLfU6n84KrWwAAAF8WfgescePGaePGjTp79qzP9rNnz%2Bqpp55SamqqX69XWVmpu%2B%2B%2BWxkZGYqPj9euXbs61ZSUlCg9PV1JSUmaO3eujh8/7rO/tbVVy5cv14QJE5ScnKysrCy5XC6fmsbGRmVnZ2vs2LFKTU1VTk6OWlpafGpOnjyp%2BfPna8yYMbrqqqu0evVqdXR0%2BHU8AAAAfgesn/3sZ6qrq9O1116roqIibdy4UUVFRZo6darq6uqUnZ3t1%2Bu1tLRoxIgRys/Pl8Vi6bR/w4YNKisrU2FhobZu3aqQkBDNmzdPra2t3pqioiLt3r1b69atU1lZmRwOhxYtWuTzOtnZ2aqtrdWmTZtUWlqqyspK5eXlefd3dHRo/vz5crvdKi8v1wMPPKDt27erpKTEzwkBAIAvO78D1tChQ/Xb3/5W48aN0wsvvKC1a9fqhRdeUGpqqn7zm99o6NChfr3epEmTtHjxYl177bXyeDyd9m/ZskULFizQ5MmTNWzYMK1evVoOh0M7d%2B6UJDU3N2vbtm1atmyZxo8fr4SEBK1atUr79u1TTU2NJOnIkSPas2ePioqKNGrUKKWkpCg3N1c7duxQfX29JOn1119XbW2tHnroIQ0fPlwZGRlavHixfv3rX/MLrAEAgF%2B69bsIv/nNb%2BoXv/iF9u7dq3fffVd79%2B7V2rVrNWTIEFObq6urk9Pp1JVXXundFhYWpqSkJFVVVUmSDhw4ILfbrYkTJ3prhgwZotjYWO3fv1%2BSVFVVpYiICCUkJHhr0tLSZLFYVF1dLUmqrq7WsGHDFBkZ6a1JT0/XmTNn9MEHH5h6XAAA4NJm6Jc99zSn0ymLxSK73e6zPSoqSk6nU5LkcrkUHByssLCwC9Y4nU6f4CRJNptNERERPjVRUVE%2BNeff9/wqFwAAwMXw%2B0nuHo9H27Zt0yuvvKKPPvrI51qo877MDxt1OBxdBjJLyIAAdGOQRQoKsp77JoBsNqvPV/iH%2BRnD/IxhfsYwP2NsNusFz8vR0dGKiYnpsff2O2CtWbNGTz75pFJSUpScnKzg4OCe6EvSuRUkj8cjp9Pps4rlcrk0YsQIb01bW5uam5t9VrFcLpf3Z%2Bx2e6dHS7jdbjU2NvrUHDhwwKfm/OpWdHT0RfdcXl6u9evXd9q%2Bau1jF/0avYdF4eEhvebRG%2BHhIYFuoU9jfsYwP2OYnzHMr/s2b36yy/PywoULO90QZya/A9bvfvc7LVy4UAsXLuyJfnwMHjxYdrtde/fuVXx8vKRzF7VXV1frlltukSQlJibKZrOpoqJCU6dOlSTV1tbqxIkTSk5OliSNGTNGTU1NOnTokPc6rIqKCnk8HiUlJXlrSktL1dDQ4P048Y033lD//v0VFxd30T3PmjVLmZmZnbZbQgZIf6vp5iQCxaOmpk/VG1awwsND1NT0qdxuHpvhL%2BZnDPMzhvkZw/yMsdmsFzwv%2B7N40h1%2BB6zPPvtMY8eONa2BlpYWffjhh947COvq6nT48GFFRERo0KBBuv322/XEE0/oiiuu0OWXX66SkhINHDhQU6ZMkXTuoveZM2equLhY4eHhCg0N1cqVK5WSkqLRo0dLkuLi4pSenq7c3FwVFBSora1NhYWFmj59unfA6enpiouL09KlS3XPPfeovr5eJSUlmjNnjl%2BrdDExMV0uOR479bHRUX3xPFJ7e4cCHbDOc7s7/t4PuoP5GcP8jGF%2BxjC/7rvQebmn%2BR2wvv3tb2v37t0%2Bd%2B0ZcfDgQd12222yWCyyWCx68MEHJUkzZsxQcXGx7rrrLp09e1Z5eXk6c%2BaM90Gn/fr1877G/fffL5vNpqysLLW2tiojI0P5%2Bfk%2B77NmzRqtWLFCc%2BfOldVq1bRp05STk%2BPdb7VaVVpaqoKCAs2ePVshISG68cYblZWVZcpxAgCALw%2BLp6uHT32Ol156SWvXrlVKSoquuuoq9e/fv1PN%2BdUl/J9jpz7WTY/ulV/DDrBrhkfq3uvjFegVrKAgqwYMCNXp05/wL7huYH7GMD9jmJ8xzM%2BY8/MLyHv7%2BwPnn9T%2Bv//7v3rNXU8PAAAgAElEQVThhRc67bdYLHr33XeNdwYAANBH%2BR2w/vSnP/VEHwAAAJcMvwPWFVdc0RN9AAAAXDL8Dljn/e1vf9OBAwd08uRJ/fCHP9SgQYP09ttva/DgwQG5Wh8AAKC38DtgNTQ0aNGiRdq3b5%2Bio6NVX1%2Bvm266SYMGDVJ5ebnCwsKUl5fXE70CAAD0CX4/e3/VqlVyOBz6/e9/rz//%2Bc/6x5sQ09LSVFFRYWqDAAAAfY3fAWv37t366U9/qmHDhsli8b19PzY2Vh999JFpzQEAAPRFfges9vZ2hYZ2/UyJpqYmBQV1%2B7IuAACAS4LfAWvUqFF6/vnnu9z38ssvKyUlxXBTAAAAfZnfy02LFy/WHXfcodtuu03Tpk2TxWLRa6%2B9pqeeeko7d%2B5UWVlZT/QJAADQZ/i9gjV27Fg988wzam1t1cqVK%2BXxePTYY4/pf/7nf/T0009r1KhRPdEnAABAn9GtC6bGjRun5557Ti0tLfr4448VHh6usLAws3sDAADokwxdkf6Vr3xFX/nKV8zqBQAA4JLgd8D6%2Bc9//i9rCgsLu9UMAADApcDvgFVVVdVpW2Njo%2Brr6/XVr35VdrvdlMYAAAD6Kr8D1gsvvNDl9vfff19LlixRbm6u4aYAAAD6Mr/vIryQYcOG6c4771RRUZFZLwkAANAnmRawJCk8PFzHjx838yUBAAD6HL8/Imxubu60rbW1VbW1tSopKdHQoUNNaQwAAKCv8jtgjRs3rtMveZYkj8ejmJgYPf7446Y0BgAA0Ff5HbC6egTDZZddpoEDByo5OVnBwcGmNAYAANBX%2BR2wbrrppp7oAwAA4JJh6kXuAAAA6MYK1siRI7u8ButCDh486O9bAAAA9Gl%2BB6zFixerrKxMNptNmZmZstvtcjqd2rVrlzwej%2BbMmSObzdYTvQIAAPQJfgesM2fOKD4%2BXo8//rhPkFq2bJl%2B9KMf6eOPP9aSJUtMa7Cjo0OPPvqoXnjhBTmdTsXExOjGG2/UggULfOpKSkq0detWnTlzRikpKSooKNDXv/517/7W1lYVFxdrx44dam1tVUZGhvLz8xUVFeWtaWxs1IoVK/SXv/xFVqtV1113nXJycviF1gAAwC9%2BX4P1/PPPd7lKZbPZNGfOHD3//POmNSdJGzZsUHl5ufLz8/Xyyy9ryZIlevLJJ/WrX/3Kp6asrEyFhYXaunWrQkJCNG/ePLW2tnprioqKtHv3bq1bt05lZWVyOBxatGiRz3tlZ2ertrZWmzZtUmlpqSorK5WXl2fq8QAAgEuf3wGrpaVFJ0%2Be7HLfyZMn9dlnnxlu6h9VVVVpypQpmjRpkmJjY3XdddcpPT1dNTU13potW7ZowYIFmjx5soYNG6bVq1fL4XBo586dks49HHXbtm1atmyZxo8fr4SEBK1atUr79u3zvs6RI0e0Z88eFRUVadSoUUpJSVFubq527Nih%2Bvp6U48JAABc2vwOWFOmTNHDDz%2BsP/zhD2ppaZF0LnT9/ve/15o1a5SZmWlqg8nJyaqoqNCxY8ckSYcPH9a%2Bfft09dVXS5Lq6urkdDp15ZVXen8mLCxMSUlJqqqqkiQdOHBAbrdbEydO9NYMGTJEsbGx2r9/v6RzQS4iIkIJCQnemrS0NFksFlVXV5t6TAAA4NLm9zVY%2Bfn5uvfee7V06VJZLBZddtll%2Buyzz%2BTxeDR58mTl5%2Beb2uD8%2BfPV3Nys66%2B/XjabTR0dHfrJT36i6dOnS5KcTqcsFovsdrvPz0VFRcnpdEqSXC6XgoODFRYWdsEap9OpyMhIn/02m00RERHeGgAAgIvhd8Dq37%2B/Hn/8cb333nuqqamR0%2BlUdHS0Ro0apeHDh5ve4I4dO/Tiiy9q7dq1Gjp0qN59910VFRUpJiZGM2bMMP39jHI4HF1%2BpGgJGRCAbgyySEFB1nPfBJDNZvX5Cv8wP2OYnzHMzxjmZ4zNZr3geTk6OloxMTE99t5%2BB6zzhg8f3iOB6p899NBDmj9/vq6//npJ0re%2B9S397//%2BrzZs2KAZM2bIbrfL4/HI6XT6rGK5XC6NGDFCkmS329XW1qbm5mafVSyXy%2BX9GbvdroaGBp/3drvdamxs7LQ69nnKy8u1fv36TttXrX3s4g%2B617AoPDyk1zx2Izw8JNAt9GnMzxjmZwzzM4b5dd/mzU92eV5euHBhp5vdzNStgNXe3q7t27frwIEDOnnypHJzc/X1r39df/zjHzVs2DANGTLEtAY//fTTTid4q9Wqjo4OSdLgwYNlt9u1d%2B9excfHSzp3UXt1dbVuueUWSVJiYqJsNpsqKio0depUSVJtba1OnDih5ORkSdKYMWPU1NSkQ4cOea/DqqiokMfjUVJS0kX3O2vWrC6vQ7OEDJD%2BVtPFT/RmHjU1faresIIVHh6ipqZP5XZ3BLSXvoj5GcP8jGF%2BxjA/Y2w26wXPy9HR0T363n4HrLq6Ov3gBz%2BQ0%2BnU8OHDVV1drebmZknnAsnu3btVXFxsWoOZmZl64oknNHDgQA0dOlSHDh3Spk2bfH4n4u23364nnnhCV1xxhS6//HKVlJRo4MCBmjJliqRzF73PnDlTxcXFCg8PV2hoqFauXKmUlBSNHj1akhQXF6f09HTl5uaqoKBAbW1tKiws1PTp0/36Q4iJielyyfHYqY8NTiIAPFJ7e4cCHbDOc7s7/t4PuoP5GcP8jGF%2BxjC/7rvQebmn%2BR2wioqKFB4erueee04RERFKTEz07pswYYIeeeQRUxv8%2Bc9/rpKSEi1fvlwNDQ2KiYnR7NmzfR40etddd%2Bns2bPKy8vTmTNnNG7cOG3cuFH9%2BvXz1tx///2y2WzKysryedDoP1qzZo1WrFihuXPnymq1atq0acrJyTH1eAAAwKXP4vF4PP78QHJysh5%2B%2BGFNmTJFbrdbI0eO1LZt2zRy5Ei99dZbuvPOO3msQReOnfpYNz26V34NO8CuGR6pe6%2BPV6BXsIKCrBowIFSnT3/Cv%2BC6gfkZw/yMYX7GMD9jzs8vEPy%2BLcFqtepCmczpdPJrZQAAwJee3wErNTVVW7ZsUXt7u3ebxXJuheO3v/2tzwM/AQAAvoz8vgYrOztbs2fP1vTp03XttdfKYrHoueee0/vvv6/a2lr95je/6Yk%2BAQAA%2Bgy/V7C%2B9a1vadu2bUpMTPT%2BYudXXnlFgwYN0m9%2B8xt94xvfMLtHAACAPsWvFSyPx6NPPvlEsbGxWrNmTU/1BAAA0Kf5tYLV1tam8ePHa8%2BePT3VDwAAQJ/nV8Dq16%2Bfvva1r13wLkIAAAB04xqs2bNna9OmTWptbe2JfgAAAPo8v%2B8idDqdqq2t1eTJk3XllVcqKirK%2B5gG6dwjG%2B677z5TmwQAAOhL/A5Yr7zyiveXL1dWVnbaT8ACAABfdn4HrN27d/dEHwAAAJeMi7oG6zvf%2BY7ef/99n20vvPCCmpqaeqQpAACAvuyiAtZ///d/6%2BzZs97/73a7tXTpUtXV1fVYYwAAAH2V33cRnsejGgAAALrW7YAFAACArhkKWP/4eAYAAACcc9F3Ed5%2B%2B%2B2dAtWcOXM6bbNYLHr77bfN6Q4AAKAPuqiAtXDhwp7uAwAA4JJBwAIAADAZF7kDAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmKxPBKxTp05pyZIlmjBhgpKSkvTd735X77zzjk9NSUmJ0tPTlZSUpLlz5%2Br48eM%2B%2B1tbW7V8%2BXJNmDBBycnJysrKksvl8qlpbGxUdna2xo4dq9TUVOXk5KilpaXHjw8AAFxaen3Aampq0uzZs9WvXz899dRT2rFjh%2B677z6Fh4d7azZs2KCysjIVFhZq69atCgkJ0bx589Ta2uqtKSoq0u7du7Vu3TqVlZXJ4XBo0aJFPu%2BVnZ2t2tpabdq0SaWlpaqsrFReXt4XdqwAAODS0OsD1oYNGxQbG6uioiIlJibq8ssvV1pamgYPHuyt2bJlixYsWKDJkydr2LBhWr16tRwOh3bu3ClJam5u1rZt27Rs2TKNHz9eCQkJWrVqlfbt26eamhpJ0pEjR7Rnzx4VFRVp1KhRSklJUW5urnbs2KH6%2BvqAHDsAAOiben3Aeu2115SYmKjFixcrLS1NN954o7Zu3erdX1dXJ6fTqSuvvNK7LSwsTElJSaqqqpIkHThwQG63WxMnTvTWDBkyRLGxsdq/f78kqaqqShEREUpISPDWpKWlyWKxqLq6uqcPEwAAXEJ6fcCqq6vTs88%2Bq29%2B85t6%2BumnNXv2bK1cuVK/%2B93vJElOp1MWi0V2u93n56KiouR0OiVJLpdLwcHBCgsLu2CN0%2BlUZGSkz36bzaaIiAhvDQAAwMW46F/2HCgdHR0aPXq0fvKTn0iS4uPj9f777%2Bu5557TjBkzAtxdZw6Ho8uPFC0hAwLQjUEWKSjIeu6bALLZrD5f4R/mZwzzM4b5GcP8jLHZrBc8L0dHRysmJqbH3rvXB6yYmBjFxcX5bIuLi9Orr74qSbLb7fJ4PHI6nT6rWC6XSyNGjPDWtLW1qbm52WcVy%2BVyeX/GbreroaHB533cbrcaGxs7rY59nvLycq1fv77T9lVrH7vo1%2Bg9LAoPD5HNZgt0I5Kk8PCQQLfQpzE/Y5ifMczPGObXfZs3P9nleXnhwoWdbnYzU68PWMnJyTp69KjPtqNHjyo2NlaSNHjwYNntdu3du1fx8fGSzl3UXl1drVtuuUWSlJiYKJvNpoqKCk2dOlWSVFtbqxMnTig5OVmSNGbMGDU1NenQoUPe67AqKirk8XiUlJR00f3OmjVLmZmZnbZbQgZIf6vx8%2BgDzaOmpk/VG1awwsND1NT0qdzujoD20hcxP2OYnzHMzxjmZ4zNZr3geTk6OrpH37vXB6w77rhDs2fPVmlpqa6//npVV1dr69atWrlypbfm9ttv1xNPPKErrrhCl19%2BuUpKSjRw4EBNmTJF0rmL3mfOnKni4mKFh4crNDRUK1euVEpKikaPHi3p3KpYenq6cnNzVVBQoLa2NhUWFmr69Ol%2B/SHExMR0ueR47NTHBicRAB6pvb1DgQ5Y57ndHX/vB93B/IxhfsYwP2OYX/dd6Lzc03p9wBo1apQee%2BwxPfzww3r88cf1//7f/1NOTo6mT5/urbnrrrt09uxZ5eXl6cyZMxo3bpw2btyofv36eWvuv/9%2B2Ww2ZWVlqbW1VRkZGcrPz/d5rzVr1mjFihWaO3eurFarpk2bppycnC/sWAEAwKXB4vF4PIFu4svg2KmPddOje9WXhn3N8Ejde328Ar2CFRRk1YABoTp9%2BhP%2BBdcNzM8Y5mcM8zOG%2BRlzfn6BwG0JAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJutzAWvDhg2Kj49XcXGxz/aSkhKlp6crKSlJc%2BfO1fHjx332t7a2avny5ZowYYKSk5OVlZUll8vlU9PY2Kjs7GyNHTtWqampysnJUUtLS48fEwAAuLT0qYBVU1Oj8vJyxcfH%2B2zfsGGDysrKVFhYqK1btyokJETz5s1Ta2urt6aoqEi7d%2B/WunXrVFZWJofDoUWLFvm8TnZ2tmpra7Vp0yaVlpaqsrJSeXl5X8ixAQCAS0efCViffPKJlixZopUrV6p///4%2B%2B7Zs2aIFCxZo8uTJGjZsmFavXi2Hw6GdO3dKkpqbm7Vt2zYtW7ZM48ePV0JCglatWqV9%2B/appqZGknTkyBHt2bNHRUVFGjVqlFJSUpSbm6sdO3aovr7%2BCz9eAADQd/WZgLVixQplZmZq4sSJPtvr6urkdDp15ZVXereFhYUpKSlJVVVVkqQDBw7I7Xb7/OyQIUMUGxur/fv3S5KqqqoUERGhhIQEb01aWposFouqq6t78tAAAMAlJijQDVyMl156Se%2B%2B%2B662bdvWaZ/T6ZTFYpHdbvfZHhUVJafTKUlyuVwKDg5WWFjYBWucTqciIyN99ttsNkVERHhrAAAALkavD1gfffSRVq1apWeeeUbBwcGBbudfcjgcXX6kaAkZEIBuDLJIQUHWc98EkM1m9fkK/zA/Y5ifMczPGOZnjM1mveB5OTo6WjExMT323r0%2BYB08eFANDQ363ve%2BJ4/HI0lyu92qrKxUWVmZXn75ZXk8HjmdTp9VLJfLpREjRkiS7Ha72tra1Nzc7LOK5XK5vD9jt9vV0NDg895ut1uNjY2dVsc%2BT3l5udavX99p%2B6q1j138QfcaFoWHh8hmswW6EUlSeHhIoFvo05ifMczPGOZnDPPrvs2bn%2BzyvLxw4cJON7uZqdcHrLS0NL3wwgs%2B2%2B677z7FxcVp/vz5Gjx4sOx2u/bu3eu9u7C5uVnV1dW65ZZbJEmJiYmy2WyqqKjQ1KlTJUm1tbU6ceKEkpOTJUljxoxRU1OTDh065L0Oq6KiQh6PR0lJSRfd76xZs5SZmdlpuyVkgPS3Gv8HEFAeNTV9qt6wghUeHqKmpk/ldncEtJe%2BiPkZw/yMYX7GMD9jbDbrBc/L0dHRPfrevT5gfeUrX9HQoUN9toWEhOirX/2q4uLiJEm33367nnjiCV1xxRW6/PLLVVJSooEDB2rKlCmSzl30PnPmTBUXFys8PFyhoaFauXKlUlJSNHr0aElSXFyc0tPTlZubq4KCArW1tamwsFDTp0/36w8hJiamyyXHY6c%2B7u4IAscjtbd3KNAB6zy3u%2BPv/aA7mJ8xzM8Y5mcM8%2Bu%2BC52Xe1qvD1hdsVh8T/h33XWXzp49q7y8PJ05c0bjxo3Txo0b1a9fP2/N/fffL5vNpqysLLW2tiojI0P5%2Bfk%2Br7NmzRqtWLFCc%2BfOldVq1bRp05STk/OFHBMAALh0WDznL2xCjzp26mPd9Ohe9aVhXzM8UvdeH69Ar2AFBVk1YECoTp/%2BhH/BdQPzM4b5GcP8jGF%2BxpyfXyBwWwIAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGAyAhYAAIDJCFgAAAAmI2ABAACYjIAFAABgMgIWAACAyQhYAAAAJiNgAQAAmIyABQAAYDICFgAAgMkIWAAAACYjYAEAAJiMgAUAAGCyXh%2BwSktLNXPmTKWkpCgtLU0//vGPdfTo0U51JSUlSk9PV1JSkubOnavjx4/77G9tbdXy5cs1YcIEJScnKysrSy6Xy6emsbFR2dnZGjt2rFJTU5WTk6OWlpYePT4AAHDp6fUBq7KyUt///ve1detWPfPMM2pvb9e8efN09uxZb82GDRtUVlamwsJCbd26VSEhIZo3b55aW1u9NUVFRdq9e7fWrVunsrIyORwOLVq0yOe9srOzVVtbq02bNqm0tFSVlZXKy8v7wo4VAABcGnp9wNq4caNmzJihuLg4DR8%2BXMXFxTpx4oQOHjzordmyZYsWLFigyZMna9iwYVq9erUcDod27twpSWpubta2bdu0bNkyjR8/XgkJCVq1apX27dunmpoaSdKRI0e0Z88eFRUVadSoUUpJSVFubq527Nih%2Bvr6gBw7AADom3p9wPpnZ86ckcVi0Ve/%2BlVJUl1dnZxOp6688kpvTVhYmJKSklRVVSVJOnDggNxutyZOnOitGTJkiGJjY7V//35JUlVVlSIiIpSQkOCtSUtLk8ViUXV19RdxaAAA4BLRpwKWx%2BPRqlWrNHbsWA0dOlSS5HQ6ZbFYZLfbfWqjoqLkdDolSS6XS8HBwQoLC7tgjdPpVGRkpM9%2Bm82miIgIbw0AAMDFCAp0A/4oKCjQBx98oGeffTbQrVyQw%2BHo8iNFS8iAAHRjkEUKCrKe%2ByaAbDarz1f4h/kZw/yMYX7GMD9jbDbrBc/L0dHRiomJ6bH37jMBa8WKFfrrX/%2BqsrIyn4HY7XZ5PB45nU6fVSyXy6URI0Z4a9ra2tTc3OyziuVyubw/Y7fb1dDQ4POebrdbjY2NnVbHPk95ebnWr1/fafuqtY9d9Gv0HhaFh4fIZrMFuhFJUnh4SKBb6NOYnzHMzxjmZwzz677Nm5/s8ry8cOHCTje7malPBKwVK1Zo165d%2BtWvfqXY2FiffYMHD5bdbtfevXsVHx8v6dxF7dXV1brlllskSYmJibLZbKqoqNDUqVMlSbW1tTpx4oSSk5MlSWPGjFFTU5MOHTrkvQ6roqJCHo9HSUlJF93rrFmzlJmZ2Wm7JWSA9Lca/w8%2BoDxqavpUvWEFKzw8RE1Nn8rt7ghoL30R8zOG%2BRnD/IxhfsbYbNYLnpejo6N79L17fcAqKCjQSy%2B9pCeeeEIhISHe66H69%2B%2Bvyy67TJJ0%2B%2B2364knntAVV1yhyy%2B/XCUlJRo4cKCmTJki6dxF7zNnzlRxcbHCw8MVGhqqlStXKiUlRaNHj5YkxcXFKT09Xbm5uSooKFBbW5sKCws1ffp0v/4QYmJiulxyPHbqY6Oj%2BOJ5pPb2DgU6YJ3ndnf8vR90B/MzhvkZw/yMYX7dd6Hzck/r9QHrueeek8Vi0a233uqzvbi4WDNmzJAk3XXXXTp79qzy8vJ05swZjRs3Ths3blS/fv289ffff79sNpuysrLU2tqqjIwM5efn%2B7zmmjVrtGLFCs2dO1dWq1XTpk1TTk5Ozx8kAAC4pFg8Ho8n0E18GRw79bFuenSv%2BtKwrxkeqXuvj1egV7CCgqwaMCBUp09/wr/guoH5GcP8jGF%2BxjA/Y87PLxC4LQEAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwAIAADAZAQsAAMBkBCwAAACTEbAAAABMRsACAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMFBboB9F5WiyR5At2GpA61t7dL6tDF92PpwX4AAPh8BCxc0NfCL9Mjr/63jrk%2BDXQrF%2B0bUSH66dRhgW4DAPAlR8DC5zrm%2BlTvf/RJoNsAAKBP4RqsLpSVlSkzM1OjR4/WzTffrJqamkC3BAAA%2BhAC1j/ZsWOHHnjgAWVlZWn79u2Kj4/XnXfeqYaGhkC3BgAA%2BggC1j/ZtGmTZs2apRkzZiguLk7Lly/Xv/3bv2nbtm2Bbg0AAPQRBKx/0NbWpnfeeUcTJ070brNYLEpLS1NVVVUAO8PFslktOnenYV/8HwDgUsFF7v/g9OnTcrvdstvtPtujoqJ09OjRAHUFf1w%2B4N/63J2PQ%2BwhWnztt3rwHbrzmIuLxeMwAKArBCyTORwO1dfXd9puCRmg4QND1RGAnrrL3v8yfSMqJNBt%2BCU24jJ91PhZoNvwS0z4Zdq27390qqnv9P218Ms0a/zgQLfxhbBapfb2dlmtUhB/Y/qN%2BRlzac7vi/vwzGazXvC8HB0drZiYmB5770vmj8sMAwYMkM1mk9Pp9Nnucrk6rWpdSHl5udavX99pe2pqqtauXdujf5iXKofDofLycs2aNYv5dQPzM8bhcGjLlqeZXzcxP2OYnzEOh0M/%2B9nP9NZbb3Xat3DhQi1atKjH3puA9Q%2BCg4M1cuRIVVRUaMqUKZIkj8ejiooK3XrrrRf1GrNmzVJmZqbPtiNHjmjJkiWqr6/nP5BuqK%2Bv1/r165WZmcn8uoH5GcP8jGF%2BxjA/Y%2Brr6/XWW2/poYceUlxcnM%2B%2B6OjoHn1vAtY/ueOOO7Rs2TIlJiZq1KhR2rx5s86ePavvfe97F/XzMTEx/EcAAEAvEhcXp5EjR36h70nA%2Bic33HCDTp8%2BrUcffVROp1MjRozQk08%2BqcjIyEC3BgAA%2BggCVhfmzJmjOXPmBLoNAADQR/EcLAAAAJPZCgoKCgLdxJdBaGioxo8fr9DQ0EC30icxP2OYnzHMzxjmZwzzMyZQ87N4PB4eIQ0AAGAiPiIEAAAwGQELAADAZAQsAAAAkxGwAAAATEbAAgAAMBkBCwAAwGQELAAAAJMRsAAAAExGwOphZWVlyszM1OjRo3XzzTerpqYm0C2ZrrKyUnfffbcyMjIUHx%2BvXbt2daopKSlRenq6kpKSNHfuXB0/ftxnf2trq5YvX64JEyYoOTlZWVlZcrlcPjWNjY3Kzs7W2LFjlZqaqpycHLW0tPjUnDx5UvPnz9eYMWN01VVXafXq1ero6PCpOXz4sObMmaPRo0dr8uTJevLJJ02ahP9KS0s1c%2BZMpaSkKC0tTT/%2B8Y919OjRTnXMr2vPPvusvvvd72rs2LEaO3as/uM//kN//etffWqY3cXbsGGD4uPjVVxc7LOdGXZt/fr1io%2BP9/nfDTfc4FPD7D7fqVOntGTJEk2YMEFJSUn67ne/q3feecenps/O0IMe89JLL3kSExM927dv93zwwQeen//8557U1FSPy%2BUKdGum2r17t%2BcXv/iF59VXX/XEx8d7du7c6bO/tLTUk5qa6vnzn//see%2B99zw/%2BtGPPFOmTPF89tln3pq8vDzP5MmTPf/1X//leeeddzyzZs3yzJ492%2Bd15s2b55kxY4anpqbG8/bbb3uuu%2B46T3Z2tne/%2B/%2B3c3chTfZvHMCvoZ4pVpoHgpAabroXt7LhZiKTEgorDQrCgjIROojSpMIOTAuRMoPsIKQSzDAySKsRBaIJvtSKnKZTW/mKRW6KzZdKtu//qJv//Zg2n2bDh%2BsDA%2B/f/cX9%2BDLlYtt9O51ITU1FZmYment70dzcjPj4eJSVlQkZh8OBhIQEnD59GlarFUajEbGxsbh///4KtbO0rKws4fXR29uL7OxsGAwGzM3NCRnub3GNjY148eIFhoaGMDg4iLKyMsjlclitVgDc3VROJUgAAAcXSURBVHKYzWYkJydjz549KC4uFta5w8WVl5cjNTUVdrsdNpsNNpsNk5OTwnnubmlTU1MwGAzIz89HV1cXRkdH0dLSguHhYSGzmjvkAWsF7du3DxcuXBCOXS4XEhMTUVFR4cVdrSypVLpgwEpISEBlZaVw7HA4oFQqYTQahWO5XI7nz58LmQ8fPkAqlcJsNgMArFYrpFIpuru7hUxzczOio6Px5csXAEBTUxNiYmJEA2xNTQ3i4uIwPz8PALh79y60Wq1wDAClpaXYsWOHhxr4M3a7HVKpFCaTSVjj/pZHq9XiwYMHALg7d01PTyMlJQWtra04ePCgaMDiDhdXXl6OtLS0Rc9zd0u7fPkyMjIylsys5g75I8IVMj8/T93d3aTT6YQ1iURCer2eOjo6vLizv2tkZIRsNhvFx8cLa/7%2B/hQbGyv00NXVRU6nU9RVREQEhYaG0tu3b4mIqKOjgwIDAykmJkbI6PV6kkgkZDabiYjIbDZTVFQUrVu3Tshs3bqVHA4HWa1WIbNlyxby9fUVZQYGBsjhcKxAA8vjcDhIIpHQmjVriIj7Ww6Xy0VGo5Hm5uZIo9Fwd8tQVFREycnJoh6I%2BPXnjsHBQUpMTKRt27ZRXl4effr0iYi4O3c0NjaSQqGgEydOkF6vp/T0dKqtrRXOr/YOecBaIZOTk%2BR0Oik4OFi0HhQURDabzUu7%2BvtsNhtJJJIle7Db7eTn50f%2B/v6LZmw2m%2BiFT0Tk4%2BNDgYGBokxQUJAo8/N5x8fH3c54CwAqLi6mzZs308aNG4mI%2B3NHf38/aTQaUiqVVFhYSNevX6eIiAjuzk1Go5EsFgvl5uYuOMcdLi02NpZKSkro1q1bVFhYSKOjo5SRkUGzs7PcnRtGRkaopqaGwsPD6fbt23TgwAG6ePEi1dXVEdHqf/35LlhhjHnF%2BfPnyWq1Uk1Njbe3sqpERETQo0ePyOFw0LNnz%2BjMmTNUXV3t7W2tCp8/f6bi4mKqrKwkPz8/b29n1UlMTBR%2BjoqKEr74/PTpU4qIiPDizlYHl8tFKpWKTp48SUREMpmM%2Bvv76d69e5SWlubl3f05fgdrhaxdu5Z8fHwWvFtlt9sXTOP/ZcHBwQRgyR6Cg4Npfn6epqenl8xMTEyIzjudTpqamhJl/nnlyM/nXb9%2BvdsZbygqKqLm5ma6c%2BcOhYSECOvc3%2B/5%2BvpSWFgYxcTEUE5ODslkMqqqquLu3PDu3TuamJigvXv3klwuJ7lcTiaTiaqqqkihUHCHyxQQEEAbNmyg4eFh7s4NISEhFBkZKVqLjIwUPmZd7R3ygLVC/Pz8SC6XU1tbm7AGgNra2kij0XhxZ39XWFgYBQcHU3t7u7A2PT1NZrNZ6EGhUJCPj4%2Boq48fP9LY2JiQUavV9PXrV%2Brp6REybW1tBIBiY2OFTH9/v%2BgPqaWlhQICAoQ/YrVaTSaTiZxOpygTHh5OAQEBK9DA7xUVFVFDQwNVVVVRaGio6Bz3t3wul4t%2B/PjB3blBr9fT48ePqa6ujurr66m%2Bvp4UCgXt3r2b6uvrucNlmpmZoeHhYQoJCeHu3KDRaBbclmZgYED4P7jqO1zy6/vsjxiNRqhUKtFtGrRa7X/uNg0zMzOwWCzo6emBVCpFZWUlLBYLxsbGAAAVFRXQarVoaGhAb28vjh07hu3bt4susy0oKIDBYEB7ezu6urp%2BeZltVlYW0tPTYTab8fr1a6SkpCAvL08473Q6sWvXLhw9ehQWiwXNzc3Q6XS4evWqkPn/y2zfv38Po9EItVrttUuVCwoKEBcXB5PJhPHxceHx7ds3IcP9Le7KlSswmUwYHR1FX18fSktLER0djdbWVgDc3b/xz6sIucPFlZSU4NWrVxgdHcWbN29w%2BPBh6HQ6TExMAODufqezsxNyuRw3btzA0NAQHj16BLVajSdPngiZ1dwhD1grrLq6GgaDAUqlEvv370dnZ6e3t%2BRxL1%2B%2BhFQqhUwmEz3Onj0rZK5du4aEhASoVCpkZmZicHBQ9Du%2Bf/%2BOoqIiaLVaqNVqHD9%2BHDabTZSZmprCqVOnsGnTJsTFxeHcuXOYnZ0VZcbGxpCdnQ21Wg2dTodLly7B6XSKMn19fcjIyIBKpUJSUhJu3rzp4Ubc96veZDIZHj58KMpxf7%2BWn5%2BP5ORkKJVK6PV6HDlyRBiufuLulufQoUOiAQvgDheTk5ODxMREKJVKJCUlITc3V3QPJ4C7%2B52mpiakpqZCpVJh586dqK2tXZBZrR1KAOBfvbfHGGOMMcZ%2Bib%2BDxRhjjDHmYTxgMcYYY4x5GA9YjDHGGGMexgMWY4wxxpiH8YDFGGOMMeZhPGAxxhhjjHkYD1iMMcYYYx7GAxZjjDHGmIfxgMUYY4wx5mE8YDHGGGOMeRgPWIwxxhhjHsYDFmOMMcaYh/GAxRhjjDHmYf8Dz%2BhxeABz%2BUMAAAAASUVORK5CYII%3D"/>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12" id="common3582540595034028961">
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">1000</td>
+        <td class="number">4199</td>
+        <td class="number">23.7%</td>
+        <td>
+            <div class="bar" style="width:87%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">2000</td>
+        <td class="number">2279</td>
+        <td class="number">12.9%</td>
+        <td>
+            <div class="bar" style="width:47%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">3000</td>
+        <td class="number">1535</td>
+        <td class="number">8.7%</td>
+        <td>
+            <div class="bar" style="width:32%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">4000</td>
+        <td class="number">1196</td>
+        <td class="number">6.8%</td>
+        <td>
+            <div class="bar" style="width:25%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">5000</td>
+        <td class="number">924</td>
+        <td class="number">5.2%</td>
+        <td>
+            <div class="bar" style="width:19%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">6000</td>
+        <td class="number">776</td>
+        <td class="number">4.4%</td>
+        <td>
+            <div class="bar" style="width:16%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">7000</td>
+        <td class="number">612</td>
+        <td class="number">3.5%</td>
+        <td>
+            <div class="bar" style="width:13%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">8000</td>
+        <td class="number">543</td>
+        <td class="number">3.1%</td>
+        <td>
+            <div class="bar" style="width:12%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">9000</td>
+        <td class="number">412</td>
+        <td class="number">2.3%</td>
+        <td>
+            <div class="bar" style="width:9%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">10000</td>
+        <td class="number">380</td>
+        <td class="number">2.1%</td>
+        <td>
+            <div class="bar" style="width:8%">&nbsp;</div>
+        </td>
+</tr><tr class="other">
+        <td class="fillremaining">Other values (131)</td>
+        <td class="number">4825</td>
+        <td class="number">27.3%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+        <div role="tabpanel" class="tab-pane col-md-12"  id="extreme3582540595034028961">
+            <p class="h4">Minimum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">1000</td>
+        <td class="number">4199</td>
+        <td class="number">23.7%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">2000</td>
+        <td class="number">2279</td>
+        <td class="number">12.9%</td>
+        <td>
+            <div class="bar" style="width:54%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">3000</td>
+        <td class="number">1535</td>
+        <td class="number">8.7%</td>
+        <td>
+            <div class="bar" style="width:37%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">4000</td>
+        <td class="number">1196</td>
+        <td class="number">6.8%</td>
+        <td>
+            <div class="bar" style="width:29%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">5000</td>
+        <td class="number">924</td>
+        <td class="number">5.2%</td>
+        <td>
+            <div class="bar" style="width:22%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+            <p class="h4">Maximum 5 values</p>
+            
+<table class="freq table table-hover">
+    <thead>
+    <tr>
+        <td class="fillremaining">Value</td>
+        <td class="number">Count</td>
+        <td class="number">Frequency (%)</td>
+        <td style="min-width:200px">&nbsp;</td>
+    </tr>
+    </thead>
+    <tr class="">
+        <td class="fillremaining">340000</td>
+        <td class="number">2</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">355000</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:50%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">370000</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:50%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">510000</td>
+        <td class="number">1</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:50%">&nbsp;</div>
+        </td>
+</tr><tr class="">
+        <td class="fillremaining">565000</td>
+        <td class="number">2</td>
+        <td class="number">0.0%</td>
+        <td>
+            <div class="bar" style="width:100%">&nbsp;</div>
+        </td>
+</tr>
+</table>
+        </div>
+    </div>
+</div>
+</div>
+    <div class="row headerrow highlight">
+        <h1>Correlations</h1>
+    </div>
+    
+    <div class="row headerrow highlight">
+        <h1>Sample</h1>
+    </div>
+    <div class="row variablerow">
+    <div class="col-md-12" style="overflow:scroll; width: 100%%; overflow-y: hidden;">
+        <table border="1" class="dataframe sample">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Age</th>
+      <th>Nationality</th>
+      <th>Overall</th>
+      <th>Potential</th>
+      <th>Club</th>
+      <th>Value</th>
+      <th>Wage</th>
+      <th>Preferred Position</th>
+      <th>Primary Language</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>20801</td>
+      <td>Cristiano Ronaldo</td>
+      <td>32</td>
+      <td>Portugal</td>
+      <td>94</td>
+      <td>94</td>
+      <td>Real Madrid CF</td>
+      <td>95500000</td>
+      <td>565000</td>
+      <td>ST</td>
+      <td>Portuguese</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>158023</td>
+      <td>L. Messi</td>
+      <td>30</td>
+      <td>Argentina</td>
+      <td>93</td>
+      <td>93</td>
+      <td>FC Barcelona</td>
+      <td>105000000</td>
+      <td>565000</td>
+      <td>RW</td>
+      <td>Spanish</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>190871</td>
+      <td>Neymar</td>
+      <td>25</td>
+      <td>Brazil</td>
+      <td>92</td>
+      <td>94</td>
+      <td>Paris Saint-Germain</td>
+      <td>123000000</td>
+      <td>280000</td>
+      <td>LW</td>
+      <td>Portuguese</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>176580</td>
+      <td>L. Suárez</td>
+      <td>30</td>
+      <td>Uruguay</td>
+      <td>92</td>
+      <td>92</td>
+      <td>FC Barcelona</td>
+      <td>97000000</td>
+      <td>510000</td>
+      <td>ST</td>
+      <td>Spanish</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>167495</td>
+      <td>M. Neuer</td>
+      <td>31</td>
+      <td>Germany</td>
+      <td>92</td>
+      <td>92</td>
+      <td>FC Bayern Munich</td>
+      <td>61000000</td>
+      <td>230000</td>
+      <td>GK</td>
+      <td>German</td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+</div>
+</div>
+
+
